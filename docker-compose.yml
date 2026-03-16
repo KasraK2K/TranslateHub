@@ -19,7 +19,7 @@ services:
       - translate-hub
 
   mongo:
-    image: mongo:7
+    image: mongo:latest
     container_name: translate-hub-mongo
     restart: unless-stopped
     ports:

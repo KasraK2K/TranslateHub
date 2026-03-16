@@ -214,10 +214,15 @@ const app = {
         <button class="theme-studio-trigger" type="button" onclick="app.toggleThemeMenu(event)">
           <span class="theme-studio-badge theme-swatch ${this.esc(activeTheme.id)}"><i class="fa-solid ${activeTheme.icon}"></i></span>
           <span class="theme-studio-copy">
-            <strong>Theme Studio</strong>
-            <small>${this.esc(activeTheme.label)} - ${this.esc(activeTheme.tone)}</small>
+            <span class="theme-studio-label">Theme</span>
+            <strong>${this.esc(activeTheme.label)}</strong>
           </span>
-          <i class="fa-solid fa-sliders theme-studio-trigger-icon"></i>
+          <span class="theme-studio-meta ${this.esc(activeTheme.mode)}">
+            ${activeTheme.mode === 'dark' ? 'Dark' : 'Light'}
+          </span>
+          <span class="theme-studio-caret">
+            <i class="fa-solid fa-chevron-down theme-studio-trigger-icon"></i>
+          </span>
         </button>
         <div class="theme-studio-panel">
           <div class="theme-studio-head">
