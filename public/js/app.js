@@ -296,8 +296,7 @@ const app = {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="auth-logo">
-            <div class="icon"><i class="fa-solid fa-globe"></i></div>
-            <h1>TranslateHub</h1>
+            <div class="icon"><img src="/logo/logo.png" alt="TranslateHub" class="brand-logo brand-logo-auth"></div>
             <p>Sign in to manage your translations</p>
           </div>
           <div class="auth-error" id="authError"></div>
@@ -322,8 +321,7 @@ const app = {
       <div class="auth-wrapper">
         <div class="auth-card">
           <div class="auth-logo">
-            <div class="icon"><i class="fa-solid fa-globe"></i></div>
-            <h1>TranslateHub</h1>
+            <div class="icon"><img src="/logo/logo.png" alt="TranslateHub" class="brand-logo brand-logo-auth"></div>
             <p>Create your super admin account to get started</p>
           </div>
           <div class="auth-error" id="authError"></div>
