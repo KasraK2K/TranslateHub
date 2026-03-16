@@ -1,4 +1,6 @@
-# TranslateHub
+<p align="center">
+  <img src="public/logo/logo.png" alt="Project logo" height="120">
+</p>
 
 TranslateHub is a self-hosted translation management platform for teams that want to manage application copy outside the main codebase and fetch translations at runtime through an API.
 
