@@ -26,6 +26,11 @@
         <img src="/logo/logo.png" alt="TranslateHub" class="brand-logo brand-logo-header">
       </a>
       <div class="header-right">
+        <button class="quick-action-btn" type="button" onclick="app.openCommandBar()">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <span>Quick Actions</span>
+          <kbd>⌘K</kbd>
+        </button>
         <div class="theme-switcher" id="themeSwitcher"></div>
         <span class="header-user" id="headerUser"></span>
         <button class="btn btn-sm" onclick="app.logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
@@ -46,6 +51,18 @@
 
   <!-- Toast container -->
   <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Command bar -->
+  <div class="command-overlay" id="commandOverlay" onclick="app.closeCommandBar(event)">
+    <div class="command-bar">
+      <div class="command-bar-input-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="commandInput" type="text" placeholder="Search pages, projects, and actions" oninput="app.renderCommandResults(this.value)">
+        <button class="btn-icon" type="button" onclick="app.closeCommandBar()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="command-results" id="commandResults"></div>
+    </div>
+  </div>
 
   <script src="/js/modules/helpers.js"></script>
   <script src="/js/modules/router.js"></script>

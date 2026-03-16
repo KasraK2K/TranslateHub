@@ -12,6 +12,8 @@ const app = {
   currentLocale: localStorage.getItem('th_current_locale') || null,
   currentTheme: localStorage.getItem('th_theme') || 'aurora',
   isThemeMenuOpen: false,
+  isCommandBarOpen: false,
+  sidebarProjectFilter: '',
   projects: [],
   keys: [],
   admins: [],
@@ -149,6 +151,79 @@ const app = {
     if (!this.isThemeMenuOpen) return;
     this.isThemeMenuOpen = false;
     this.renderThemeSwitcher();
+  },
+
+  openCommandBar() {
+    this.isCommandBarOpen = true;
+    const overlay = document.getElementById('commandOverlay');
+    if (!overlay) return;
+    overlay.classList.add('active');
+    this.renderCommandResults('');
+    const input = document.getElementById('commandInput');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 0);
+    }
+  },
+
+  closeCommandBar(event) {
+    if (event && event.target !== event.currentTarget) return;
+    this.isCommandBarOpen = false;
+    const overlay = document.getElementById('commandOverlay');
+    if (overlay) overlay.classList.remove('active');
+  },
+
+  getCommandItems() {
+    const items = [
+      { label: 'Go to Projects', hint: 'View all projects', icon: 'fa-folder', action: "app.navigate('projects')" },
+      { label: 'Go to Documentation', hint: 'Open docs and API reference', icon: 'fa-book', action: "app.navigate('docs')" },
+      { label: 'Create Project', hint: 'Open the new project modal', icon: 'fa-plus', action: 'app.showCreateProjectModal()' }
+    ];
+
+    if (this.user && this.user.role === 'super_admin') {
+      items.splice(1, 0, { label: 'Go to Admins', hint: 'Manage dashboard access', icon: 'fa-users', action: "app.navigate('admins')" });
+    }
+
+    if (this.currentProject) {
+      items.push(
+        { label: 'Project Settings', hint: this.currentProject.name, icon: 'fa-gear', action: 'app.showProjectSettingsModal()' },
+        { label: 'Show API Key', hint: this.currentProject.name, icon: 'fa-key', action: 'app.showApiKeyModal()' }
+      );
+    }
+
+    this.projects.forEach((project) => {
+      items.push({
+        label: project.name,
+        hint: `${project.isLocked ? 'Locked' : 'Unlocked'} project`,
+        icon: project.isLocked ? 'fa-lock' : 'fa-language',
+        action: `app.showProject('${project._id}')`
+      });
+    });
+
+    return items;
+  },
+
+  renderCommandResults(query) {
+    const container = document.getElementById('commandResults');
+    if (!container) return;
+
+    const normalizedQuery = String(query || '').trim().toLowerCase();
+    const items = this.getCommandItems().filter((item) => {
+      if (!normalizedQuery) return true;
+      return `${item.label} ${item.hint}`.toLowerCase().includes(normalizedQuery);
+    });
+
+    container.innerHTML = items.length
+      ? items.map((item) => `
+          <button class="command-item" type="button" onclick="${item.action}; app.closeCommandBar();">
+            <span class="command-item-icon"><i class="fa-solid ${item.icon}"></i></span>
+            <span class="command-item-copy">
+              <strong>${this.esc(item.label)}</strong>
+              <small>${this.esc(item.hint)}</small>
+            </span>
+          </button>
+        `).join('')
+      : '<div class="command-empty"><i class="fa-solid fa-compass"></i><strong>No matches</strong><span>Try a project name, page, or action.</span></div>';
   },
 
   toggleSidebar() {
@@ -450,7 +525,10 @@ const app = {
 
   renderSidebar() {
     const isSuperAdmin = this.user.role === 'super_admin';
-    const projectItems = this.projects.map((project) => `
+    const filteredProjects = this.projects.filter((project) =>
+      project.name.toLowerCase().includes(this.sidebarProjectFilter.toLowerCase())
+    );
+    const projectItems = filteredProjects.map((project) => `
       <div class="sidebar-item ${this.currentProjectId === project._id ? 'active' : ''}" onclick="app.showProject('${project._id}')">
         <i class="fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon"></i> ${this.esc(project.name)}
       </div>
@@ -472,10 +550,22 @@ const app = {
         </div>
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-section-label">Your Projects</div>
-        ${projectItems || '<div class="sidebar-empty">No projects yet</div>'}
+        <div class="sidebar-section-head">
+          <div class="sidebar-section-label">Your Projects</div>
+          <span class="sidebar-count">${this.projects.length}</span>
+        </div>
+        <div class="sidebar-project-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" placeholder="Filter projects" value="${this.esc(this.sidebarProjectFilter)}" oninput="app.filterSidebarProjects(this.value)">
+        </div>
+        ${projectItems || '<div class="sidebar-empty">No matching projects</div>'}
       </div>
     `;
+  },
+
+  filterSidebarProjects(value) {
+    this.sidebarProjectFilter = value;
+    this.renderSidebar();
   },
 
   navigate(page, options = {}) {
@@ -539,14 +629,24 @@ const app = {
 
     const cards = this.projects.map(p => {
       const locales = this.getProjectLocales(p);
+      const translated = p.stats ? Object.values(p.stats).reduce((sum, item) => sum + (item.translated || 0), 0) : 0;
+      const total = p.stats ? Object.values(p.stats).reduce((sum, item) => sum + (item.total || 0), 0) : 0;
+      const completion = total ? Math.round((translated / total) * 100) : 0;
       return `
         <div class="project-card" onclick="app.showProject('${p._id}')">
+          <div class="project-card-topline">
+            <span class="project-status ${p.isLocked ? 'locked' : 'unlocked'}"><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Live'}</span>
+            <span class="project-score">${completion}% ready</span>
+          </div>
           <h3>${this.esc(p.name)}</h3>
           <div class="project-desc">${this.esc(p.description || 'No description')}</div>
           <div class="project-meta">
             <span><i class="fa-solid fa-language"></i> Source: <strong>${p.sourceLocale}</strong></span>
             <span><i class="fa-solid fa-earth-americas"></i> ${locales.length} locale${locales.length !== 1 ? 's' : ''}</span>
-            <span><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Unlocked'}</span>
+            <span><i class="fa-solid fa-file-lines"></i> ${(p.stats && Object.values(p.stats)[0] && Object.values(p.stats)[0].total) || 0} keys</span>
+          </div>
+          <div class="project-card-progress">
+            <div class="project-card-progress-bar"><span style="width:${completion}%"></span></div>
           </div>
           <div class="locale-tags">
             ${locales.map((locale) => `<span class="locale-tag">${this.esc(locale.code)} - ${this.esc(locale.name)}</span>`).join('')}
@@ -712,6 +812,9 @@ const app = {
 
     const statsHtml = Object.entries(stats).map(([code, s]) => `
       <div class="stat-card">
+        <div class="stat-ring" style="--ring:${s.percentage}%">
+          <span>${s.percentage}%</span>
+        </div>
         <div class="stat-locale">${this.esc(s.name || code)} ${code === p.sourceLocale ? '(source)' : ''}</div>
         <div class="stat-count">${s.translated}/${s.total} (${s.percentage}%)</div>
         <div class="progress-bar">
@@ -719,6 +822,9 @@ const app = {
         </div>
       </div>
     `).join('');
+
+    const totalKeys = Object.values(stats)[0] ? Object.values(stats)[0].total : 0;
+    const activeLocaleStats = stats[this.currentLocale] || { percentage: 0, translated: 0, total: 0 };
 
     const localeOptions = locales.map((locale) =>
       `<option value="${this.esc(locale.code)}" ${locale.code === this.currentLocale ? 'selected' : ''}>${this.esc(locale.name)} (${this.esc(locale.code)})${locale.code === p.sourceLocale ? ' - source' : ''}</option>`
@@ -734,16 +840,26 @@ const app = {
         <span>${this.esc(p.name)}</span>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-        <div>
-          <h1 style="font-size:24px;font-weight:700">${this.esc(p.name)}</h1>
-          <p style="color:var(--gray-500);font-size:14px;margin-top:4px">${this.esc(p.description || '')}</p>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="project-shell">
+        <div class="project-shell-head">
+          <div>
+            <div class="project-shell-kicker">Translation workspace</div>
+            <h1 class="project-shell-title">${this.esc(p.name)}</h1>
+            <p class="project-shell-desc">${this.esc(p.description || 'A central place to manage source copy, translations, and release readiness.')}</p>
+          </div>
+          <div class="project-shell-actions">
+            <div class="project-pill-grid">
+              <div class="project-pill"><i class="fa-solid fa-earth-americas"></i><span>${locales.length} locales</span></div>
+              <div class="project-pill"><i class="fa-solid fa-file-lines"></i><span>${totalKeys} keys</span></div>
+              <div class="project-pill"><i class="fa-solid fa-chart-line"></i><span>${activeLocaleStats.percentage}% in ${this.esc(curLocaleName)}</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${lockButton}
           <button class="btn btn-sm" onclick="app.showApiKeyModal()"><i class="fa-solid fa-key"></i> API Key</button>
           <button class="btn btn-sm" onclick="app.showProjectSettingsModal()"><i class="fa-solid fa-gear"></i> Settings</button>
           <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-trash"></i> Delete</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1645,6 +1761,17 @@ def t(key, locale="en"):
     this.setTheme(this.currentTheme);
     document.addEventListener('click', () => this.closeThemeMenu());
     window.addEventListener('hashchange', () => this.handleRouteChange());
+    document.addEventListener('keydown', (event) => {
+      const isQuickAction = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
+      if (isQuickAction) {
+        event.preventDefault();
+        this.openCommandBar();
+      }
+
+      if (event.key === 'Escape') {
+        this.closeCommandBar();
+      }
+    });
 
     if (this.token) {
       try {
