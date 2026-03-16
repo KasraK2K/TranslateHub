@@ -560,12 +560,16 @@ body::after {
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
+  width: 100%;
+  border: none;
   font-size: 14px;
   color: var(--gray-600);
   border-radius: 6px;
+  background: transparent;
   cursor: pointer;
   transition: all 0.12s;
   text-decoration: none;
+  text-align: left;
 }
 
 .sidebar-item:hover {
@@ -661,7 +665,19 @@ body::after {
   cursor: pointer;
 }
 
+.breadcrumb-link {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+}
+
 .breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-link:hover {
   text-decoration: underline;
 }
 
@@ -832,6 +848,7 @@ body::after {
   border: 1px solid var(--surface-border);
   border-radius: var(--radius);
   padding: 18px;
+  width: 100%;
   cursor: pointer;
   transition:
     transform 0.18s ease,
@@ -841,6 +858,7 @@ body::after {
   position: relative;
   overflow: hidden;
   min-height: 232px;
+  text-align: left;
 }
 
 .project-card-topline {

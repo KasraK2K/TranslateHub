@@ -529,25 +529,25 @@ const app = {
       project.name.toLowerCase().includes(this.sidebarProjectFilter.toLowerCase())
     );
     const projectItems = filteredProjects.map((project) => `
-      <div class="sidebar-item ${this.currentProjectId === project._id ? 'active' : ''}" onclick="app.showProject('${project._id}')">
+      <button class="sidebar-item ${this.currentProjectId === project._id ? 'active' : ''}" type="button" onclick="app.showProject('${project._id}')">
         <i class="fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon"></i> ${this.esc(project.name)}
-      </div>
+      </button>
     `).join('');
 
     document.getElementById('sidebar').innerHTML = `
       <div class="sidebar-section">
         <div class="sidebar-section-label">Menu</div>
-        <div class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" onclick="app.navigate('projects')">
+        <button class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" type="button" onclick="app.navigate('projects')">
           <i class="fa-solid fa-folder icon"></i> Projects
-        </div>
+        </button>
         ${isSuperAdmin ? `
-        <div class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" onclick="app.navigate('admins')">
+        <button class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" type="button" onclick="app.navigate('admins')">
           <i class="fa-solid fa-users icon"></i> Admins
-        </div>
+        </button>
         ` : ''}
-        <div class="sidebar-item ${this.currentPage === 'docs' ? 'active' : ''}" onclick="app.navigate('docs')">
+        <button class="sidebar-item ${this.currentPage === 'docs' ? 'active' : ''}" type="button" onclick="app.navigate('docs')">
           <i class="fa-solid fa-book icon"></i> Documentation
-        </div>
+        </button>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-section-head">
@@ -634,6 +634,7 @@ const app = {
       const completion = total ? Math.round((translated / total) * 100) : 0;
       return `
         <div class="project-card" onclick="app.showProject('${p._id}')">
+        <button class="project-card" type="button" onclick="app.showProject('${p._id}')">
           <div class="project-card-topline">
             <span class="project-status ${p.isLocked ? 'locked' : 'unlocked'}"><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Live'}</span>
             <span class="project-score">${completion}% ready</span>
@@ -651,7 +652,7 @@ const app = {
           <div class="locale-tags">
             ${locales.map((locale) => `<span class="locale-tag">${this.esc(locale.code)} - ${this.esc(locale.name)}</span>`).join('')}
           </div>
-        </div>
+        </button>
       `;
     }).join('');
 
@@ -835,7 +836,7 @@ const app = {
 
     return `
       <div class="breadcrumb">
-        <a onclick="app.navigate('projects')">Projects</a>
+        <button type="button" class="breadcrumb-link" onclick="app.navigate('projects')">Projects</button>
         <span>/</span>
         <span>${this.esc(p.name)}</span>
       </div>
