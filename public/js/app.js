@@ -11,13 +11,20 @@ const app = {
   currentProjectId: localStorage.getItem('th_current_project_id') || null,
   currentLocale: localStorage.getItem('th_current_locale') || null,
   currentTheme: localStorage.getItem('th_theme') || 'aurora',
+  isThemeMenuOpen: false,
   projects: [],
   keys: [],
   admins: [],
   themes: [
-    { id: 'aurora', label: 'Aurora', icon: 'fa-sun' },
-    { id: 'ember', label: 'Ember', icon: 'fa-fire' },
-    { id: 'ocean', label: 'Ocean', icon: 'fa-water' }
+    { id: 'aurora', label: 'Aurora', icon: 'fa-sun', tone: 'Bright glass', mode: 'light' },
+    { id: 'ember', label: 'Ember', icon: 'fa-fire', tone: 'Warm editorial', mode: 'light' },
+    { id: 'ocean', label: 'Ocean', icon: 'fa-water', tone: 'Cool clarity', mode: 'light' },
+    { id: 'paper', label: 'Paper', icon: 'fa-feather-pointed', tone: 'Soft neutral', mode: 'light' },
+    { id: 'sunset', label: 'Sunset', icon: 'fa-mountain-sun', tone: 'Golden bloom', mode: 'light' },
+    { id: 'dusk', label: 'Dusk', icon: 'fa-cloud-moon', tone: 'Soft dark', mode: 'dark' },
+    { id: 'graphite', label: 'Graphite', icon: 'fa-meteor', tone: 'Industrial dark', mode: 'dark' },
+    { id: 'forest-night', label: 'Forest Night', icon: 'fa-leaf', tone: 'Deep green dark', mode: 'dark' },
+    { id: 'midnight-neon', label: 'Midnight Neon', icon: 'fa-bolt', tone: 'Electric dark', mode: 'dark' }
   ],
 
   defaultLocaleName(code) {
@@ -127,6 +134,20 @@ const app = {
     this.currentTheme = selectedTheme;
     localStorage.setItem('th_theme', selectedTheme);
     document.documentElement.setAttribute('data-theme', selectedTheme);
+    document.body.setAttribute('data-theme', selectedTheme);
+    this.isThemeMenuOpen = false;
+    this.renderThemeSwitcher();
+  },
+
+  toggleThemeMenu(event) {
+    if (event) event.stopPropagation();
+    this.isThemeMenuOpen = !this.isThemeMenuOpen;
+    this.renderThemeSwitcher();
+  },
+
+  closeThemeMenu() {
+    if (!this.isThemeMenuOpen) return;
+    this.isThemeMenuOpen = false;
     this.renderThemeSwitcher();
   },
 
@@ -184,17 +205,59 @@ const app = {
     const container = document.getElementById('themeSwitcher');
     if (!container) return;
 
-    container.innerHTML = this.themes.map((theme) => `
+    const activeTheme = this.themes.find((theme) => theme.id === this.currentTheme) || this.themes[0];
+    const lightThemes = this.themes.filter((theme) => theme.mode !== 'dark');
+    const darkThemes = this.themes.filter((theme) => theme.mode === 'dark');
+
+    container.innerHTML = `
+      <div class="theme-studio ${this.isThemeMenuOpen ? 'open' : ''}" onclick="event.stopPropagation()">
+        <button class="theme-studio-trigger" type="button" onclick="app.toggleThemeMenu(event)">
+          <span class="theme-studio-badge theme-swatch ${this.esc(activeTheme.id)}"><i class="fa-solid ${activeTheme.icon}"></i></span>
+          <span class="theme-studio-copy">
+            <strong>Theme Studio</strong>
+            <small>${this.esc(activeTheme.label)} - ${this.esc(activeTheme.tone)}</small>
+          </span>
+          <i class="fa-solid fa-sliders theme-studio-trigger-icon"></i>
+        </button>
+        <div class="theme-studio-panel">
+          <div class="theme-studio-head">
+            <div>
+              <strong>Choose a visual mood</strong>
+              <span>${this.themes.length} themes available</span>
+            </div>
+          </div>
+          <div class="theme-group">
+            <div class="theme-group-label">Light Themes</div>
+            <div class="theme-grid">
+              ${lightThemes.map((theme) => this.renderThemeCard(theme)).join('')}
+            </div>
+          </div>
+          <div class="theme-group">
+            <div class="theme-group-label">Dark Themes</div>
+            <div class="theme-grid">
+              ${darkThemes.map((theme) => this.renderThemeCard(theme)).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderThemeCard(theme) {
+    return `
       <button
-        class="theme-pill ${theme.id === this.currentTheme ? 'active' : ''}"
+        class="theme-card ${theme.id === this.currentTheme ? 'active' : ''}"
         onclick="app.setTheme('${theme.id}')"
         title="${theme.label} theme"
         type="button"
       >
-        <i class="fa-solid ${theme.icon}"></i>
-        <span>${theme.label}</span>
+        <span class="theme-card-top">
+          <span class="theme-swatch ${this.esc(theme.id)}"><i class="fa-solid ${theme.icon}"></i></span>
+          <span class="theme-card-name">${this.esc(theme.label)}</span>
+        </span>
+        <span class="theme-card-tone">${this.esc(theme.tone)}</span>
       </button>
-    `).join('');
+    `;
   },
 
   restoreLastView() {
@@ -1586,6 +1649,7 @@ def t(key, locale="en"):
   // ==================== Init ====================
   async init() {
     this.setTheme(this.currentTheme);
+    document.addEventListener('click', () => this.closeThemeMenu());
     window.addEventListener('hashchange', () => this.handleRouteChange());
 
     if (this.token) {
