@@ -633,7 +633,6 @@ const app = {
       const total = p.stats ? Object.values(p.stats).reduce((sum, item) => sum + (item.total || 0), 0) : 0;
       const completion = total ? Math.round((translated / total) * 100) : 0;
       return `
-        <div class="project-card" onclick="app.showProject('${p._id}')">
         <button class="project-card" type="button" onclick="app.showProject('${p._id}')">
           <div class="project-card-topline">
             <span class="project-status ${p.isLocked ? 'locked' : 'unlocked'}"><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Live'}</span>
