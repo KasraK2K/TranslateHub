@@ -371,11 +371,25 @@ const app = {
     document.getElementById('headerUser').textContent = this.user.displayName || this.user.username;
     this.renderThemeSwitcher();
     this.renderSidebar();
+    this.refreshProjectsCache();
     this.restoreLastView();
+  },
+
+  async refreshProjectsCache() {
+    try {
+      this.projects = await this.fetch(`${API}/projects`);
+      this.renderSidebar();
+    } catch (e) {}
   },
 
   renderSidebar() {
     const isSuperAdmin = this.user.role === 'super_admin';
+    const projectItems = this.projects.map((project) => `
+      <div class="sidebar-item ${this.currentProjectId === project._id ? 'active' : ''}" onclick="app.showProject('${project._id}')">
+        <i class="fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon"></i> ${this.esc(project.name)}
+      </div>
+    `).join('');
+
     document.getElementById('sidebar').innerHTML = `
       <div class="sidebar-top">
         <div class="sidebar-brand">
@@ -391,11 +405,6 @@ const app = {
         <div class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" onclick="app.navigate('projects')">
           <i class="fa-solid fa-folder icon"></i> Projects
         </div>
-        ${this.currentProjectId && this.currentProject ? `
-        <div class="sidebar-item ${this.currentPage === 'projects' && this.currentProjectId ? 'active' : ''}" onclick="app.showProject('${this.currentProjectId}')">
-          <i class="fa-solid fa-language icon"></i> ${this.esc(this.currentProject.name)}
-        </div>
-        ` : ''}
         ${isSuperAdmin ? `
         <div class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" onclick="app.navigate('admins')">
           <i class="fa-solid fa-users icon"></i> Admins
@@ -404,6 +413,10 @@ const app = {
         <div class="sidebar-item ${this.currentPage === 'docs' ? 'active' : ''}" onclick="app.navigate('docs')">
           <i class="fa-solid fa-book icon"></i> Documentation
         </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Your Projects</div>
+        ${projectItems || '<div class="sidebar-empty">No projects yet</div>'}
       </div>
     `;
   },
@@ -448,6 +461,7 @@ const app = {
       }));
       return;
     }
+    this.renderSidebar();
     this.render(this.renderProjectsList());
   },
 
@@ -587,6 +601,7 @@ const app = {
         method: 'POST',
         body: JSON.stringify({ name, description, sourceLocale: sourceCode, locales, projectPassword })
       });
+      await this.refreshProjectsCache();
       this.closeModal();
       this.toast('Project created!', 'success');
       this.showProject(project._id);
@@ -619,6 +634,7 @@ const app = {
       this.currentLocale = codes.find(c => c !== this.currentProject.sourceLocale) || this.currentProject.sourceLocale;
     }
     this.saveViewState();
+    await this.refreshProjectsCache();
     this.updateRoute({ page: 'project', projectId, locale: this.currentLocale }, true);
     this.renderSidebar();
     this.closeSidebar();
@@ -959,6 +975,7 @@ const app = {
 
   showProjectSettingsModal() {
     const p = this.currentProject;
+    const hasPassword = !!p.hasProjectPassword;
     const localeRows = this.getProjectLocales(p).map((locale) => `
       <div class="form-row locale-setting-row" style="margin-bottom:8px" data-is-source="${locale.code === p.sourceLocale}">
         <div><input type="text" class="setting-locale-code" value="${this.esc(locale.code)}" placeholder="Code" ${locale.code === p.sourceLocale ? 'readonly style="background:var(--gray-100)"' : ''}></div>
@@ -992,9 +1009,13 @@ const app = {
           </button>
         </div>
         <div class="form-group">
-          <label>Change Project Password</label>
-          <input type="password" id="editProjectPassword" placeholder="Leave blank to keep current password" autocomplete="new-password">
-          <div class="form-hint">If set, this replaces the password used for lock, unlock, and delete.</div>
+          <label>${hasPassword ? 'Change Project Password' : 'Add Project Password'}</label>
+          ${hasPassword ? `
+            <input type="password" id="editCurrentProjectPassword" placeholder="Current project password" autocomplete="current-password" style="margin-bottom:8px">
+          ` : ''}
+          <input type="password" id="editProjectPassword" placeholder="${hasPassword ? 'New project password' : 'Set a project password'}" autocomplete="new-password" style="margin-bottom:8px">
+          <input type="password" id="editProjectPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password">
+          <div class="form-hint">${hasPassword ? 'To change the password, enter the current password, a new password, and confirm it.' : 'This project has no password yet. Add one to enable lock, unlock, and delete protection.'}</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1022,15 +1043,30 @@ const app = {
   async updateProject() {
     const name = document.getElementById('editName').value.trim();
     const description = document.getElementById('editDesc').value.trim();
+    const currentProjectPasswordEl = document.getElementById('editCurrentProjectPassword');
     const projectPassword = document.getElementById('editProjectPassword').value;
+    const confirmProjectPassword = document.getElementById('editProjectPasswordConfirm').value;
+    const currentProjectPassword = currentProjectPasswordEl ? currentProjectPasswordEl.value : '';
     const nameError = Helpers.validateRequired([
       { value: name, message: 'Name is required' }
     ]);
     if (nameError) return this.toast(nameError, 'error');
 
-    if (projectPassword) {
+    if (projectPassword || confirmProjectPassword || currentProjectPassword) {
+      if (!projectPassword) {
+        return this.toast('New project password is required', 'error');
+      }
+
       const passwordError = Helpers.validateMinLength(projectPassword, 6, 'Project password must be at least 6 characters');
       if (passwordError) return this.toast(passwordError, 'error');
+
+      if (projectPassword !== confirmProjectPassword) {
+        return this.toast('New password and confirm password must match', 'error');
+      }
+
+      if (this.currentProject.hasProjectPassword && !currentProjectPassword) {
+        return this.toast('Current project password is required', 'error');
+      }
     }
 
     const locales = this.collectLocales('.locale-setting-row', '.setting-locale-code', '.setting-locale-name', {
@@ -1042,7 +1078,13 @@ const app = {
 
     try {
       await this.fetch(`${API}/projects/${this.currentProject._id}`, {
-        method: 'PUT', body: JSON.stringify({ name, description, locales, projectPassword })
+        method: 'PUT', body: JSON.stringify({
+          name,
+          description,
+          locales,
+          projectPassword: projectPassword || undefined,
+          currentProjectPassword: currentProjectPassword || undefined
+        })
       });
       this.closeModal();
       this.toast('Project updated!', 'success');

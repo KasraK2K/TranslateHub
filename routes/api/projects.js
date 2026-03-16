@@ -52,13 +52,16 @@ router.post('/', async (req, res) => {
 // GET /api/projects/:id - Get project details with stats
 router.get('/:id', async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await getProjectWithPassword(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     const stats = await project.getStats();
-    res.json({ ...project.toObject(), stats });
+    const payload = project.toObject();
+    payload.hasProjectPassword = Boolean(project.projectPassword);
+    delete payload.projectPassword;
+    res.json({ ...payload, stats });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -67,7 +70,7 @@ router.get('/:id', async (req, res) => {
 // PUT /api/projects/:id - Update project
 router.put('/:id', async (req, res) => {
   try {
-    const { name, description, sourceLocale, locales, projectPassword } = req.body;
+    const { name, description, sourceLocale, locales, projectPassword, currentProjectPassword } = req.body;
     const project = await getProjectWithPassword(req.params.id);
 
     if (!project) {
@@ -82,6 +85,18 @@ router.put('/:id', async (req, res) => {
       if (projectPassword.length < 6) {
         return res.status(400).json({ error: 'Project password must be at least 6 characters' });
       }
+
+       if (project.projectPassword) {
+        if (!currentProjectPassword) {
+          return res.status(400).json({ error: 'Current project password is required' });
+        }
+
+        const matches = await project.compareProjectPassword(currentProjectPassword);
+        if (!matches) {
+          return res.status(401).json({ error: 'Current project password is incorrect' });
+        }
+      }
+
       project.projectPassword = projectPassword;
     }
 
