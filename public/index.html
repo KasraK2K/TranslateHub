@@ -4,16 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TranslateHub</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <header class="app-header">
-    <a class="logo" onclick="app.showProjects()">
-      <span>&#127760;</span> TranslateHub
-    </a>
-  </header>
+  <!-- Auth screens (login / setup) -->
+  <div id="authScreen" style="display:none"></div>
 
-  <main class="main-content" id="app"></main>
+  <!-- Dashboard (shown after login) -->
+  <div id="dashboard" style="display:none">
+    <header class="app-header">
+      <a class="logo" onclick="app.navigate('projects')">
+        <i class="fa-solid fa-globe"></i> TranslateHub
+      </a>
+      <div class="header-right">
+        <span class="header-user" id="headerUser"></span>
+        <button class="btn btn-sm" onclick="app.logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </header>
+
+    <div class="dashboard-layout">
+      <nav class="sidebar" id="sidebar"></nav>
+      <main class="main-content" id="app"></main>
+    </div>
+  </div>
 
   <!-- Modal container -->
   <div class="modal-overlay" id="modalOverlay" onclick="app.closeModal(event)">

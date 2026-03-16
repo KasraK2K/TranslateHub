@@ -6,108 +6,114 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Project = require('../models/Project');
 const TranslationKey = require('../models/TranslationKey');
+const User = require('../models/User');
 
 const DEMO_PROJECT = {
   name: 'Demo App',
   description: 'A sample project to demonstrate TranslateHub',
-  sourceLocale: 'en',
-  locales: ['en', 'fr', 'es', 'de']
+  sourceLocale: 'en-US',
+  locales: [
+    { code: 'en-US', name: 'English (United States)' },
+    { code: 'fr-FR', name: 'French (France)' },
+    { code: 'es-ES', name: 'Spanish (Spain)' },
+    { code: 'de-DE', name: 'German (Germany)' }
+  ]
 };
 
 const DEMO_KEYS = [
   {
     key: 'common.welcome',
     description: 'Main welcome message on homepage',
-    translations: {
-      en: 'Welcome to our app!',
-      fr: 'Bienvenue dans notre application !',
-      es: 'Bienvenido a nuestra aplicación!',
-      de: 'Willkommen in unserer App!'
-    }
+      translations: {
+        'en-US': 'Welcome to our app!',
+        'fr-FR': 'Bienvenue dans notre application !',
+        'es-ES': 'Bienvenido a nuestra aplicación!',
+        'de-DE': 'Willkommen in unserer App!'
+      }
   },
   {
     key: 'common.logout',
     description: 'Logout button text',
-    translations: {
-      en: 'Log Out',
-      fr: 'Déconnexion',
-      es: 'Cerrar sesión',
-      de: 'Abmelden'
-    }
+      translations: {
+        'en-US': 'Log Out',
+        'fr-FR': 'Déconnexion',
+        'es-ES': 'Cerrar sesión',
+        'de-DE': 'Abmelden'
+      }
   },
   {
     key: 'nav.home',
     description: 'Navigation home link',
-    translations: {
-      en: 'Home',
-      fr: 'Accueil',
-      es: 'Inicio',
-      de: 'Startseite'
-    }
+      translations: {
+        'en-US': 'Home',
+        'fr-FR': 'Accueil',
+        'es-ES': 'Inicio',
+        'de-DE': 'Startseite'
+      }
   },
   {
     key: 'nav.settings',
     description: 'Navigation settings link',
-    translations: {
-      en: 'Settings',
-      fr: 'Paramètres',
-      es: 'Configuración',
-      de: 'Einstellungen'
-    }
+      translations: {
+        'en-US': 'Settings',
+        'fr-FR': 'Paramètres',
+        'es-ES': 'Configuración',
+        'de-DE': 'Einstellungen'
+      }
   },
   {
     key: 'auth.login.title',
     description: 'Login page heading',
-    translations: {
-      en: 'Sign In',
-      fr: 'Se connecter',
-      es: 'Iniciar sesión',
-      de: 'Anmelden'
-    }
+      translations: {
+        'en-US': 'Sign In',
+        'fr-FR': 'Se connecter',
+        'es-ES': 'Iniciar sesión',
+        'de-DE': 'Anmelden'
+      }
   },
   {
     key: 'auth.login.email',
     description: 'Email input label',
-    translations: {
-      en: 'Email Address',
-      fr: 'Adresse e-mail',
-      es: 'Correo electrónico'
-      // de intentionally missing to show untranslated state
-    }
+      translations: {
+        'en-US': 'Email Address',
+        'fr-FR': 'Adresse e-mail',
+        'es-ES': 'Correo electrónico'
+        // de-DE intentionally missing to show untranslated state
+      }
   },
   {
     key: 'auth.login.password',
     description: 'Password input label',
-    translations: {
-      en: 'Password',
-      fr: 'Mot de passe'
-      // es and de intentionally missing
-    }
+      translations: {
+        'en-US': 'Password',
+        'fr-FR': 'Mot de passe'
+        // es-ES and de-DE intentionally missing
+      }
   },
   {
     key: 'errors.notFound',
     description: '404 page message',
-    translations: {
-      en: 'Page not found',
-      fr: 'Page non trouvée',
-      es: 'Página no encontrada',
-      de: 'Seite nicht gefunden'
-    }
+      translations: {
+        'en-US': 'Page not found',
+        'fr-FR': 'Page non trouvée',
+        'es-ES': 'Página no encontrada',
+        'de-DE': 'Seite nicht gefunden'
+      }
   },
   {
     key: 'errors.generic',
     description: 'Generic error message',
-    translations: {
-      en: 'Something went wrong. Please try again.',
-      fr: 'Une erreur est survenue. Veuillez réessayer.'
-    }
+      translations: {
+        'en-US': 'Something went wrong. Please try again.',
+        'fr-FR': 'Une erreur est survenue. Veuillez réessayer.'
+      }
   },
   {
     key: 'profile.title',
     description: 'Profile page heading',
-    translations: {
-      en: 'My Profile'
-    }
+      translations: {
+        'en-US': 'My Profile'
+      }
   }
 ];
 
@@ -115,6 +121,20 @@ async function seed() {
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/translate-hub');
     console.log('Connected to MongoDB');
+
+    // Create default super admin if none exists
+    const adminCount = await User.countDocuments({ role: 'super_admin' });
+    if (adminCount === 0) {
+      const admin = await User.create({
+        username: 'admin',
+        password: 'admin123',
+        displayName: 'Super Admin',
+        role: 'super_admin'
+      });
+      console.log(`Created super admin: username=admin, password=admin123`);
+    } else {
+      console.log('Super admin already exists, skipping...');
+    }
 
     // Clean existing demo data
     const existing = await Project.findOne({ slug: 'demo-app' });
@@ -141,7 +161,7 @@ async function seed() {
     console.log(`Created ${DEMO_KEYS.length} translation keys`);
     console.log('\nDone! Start the server with: npm start');
     console.log(`Then visit: http://localhost:3000`);
-    console.log(`\nPublic API: curl -H "X-API-Key: ${project.apiKey}" http://localhost:3000/api/v1/translations/en`);
+    console.log(`\nPublic API: curl -H "X-API-Key: ${project.apiKey}" http://localhost:3000/api/v1/translations/en-US`);
 
     await mongoose.disconnect();
   } catch (error) {

@@ -1,19 +1,77 @@
 const API = '/api';
 
 const app = {
+  token: localStorage.getItem('th_token'),
+  user: JSON.parse(localStorage.getItem('th_user') || 'null'),
+  currentPage: 'projects',
   currentProject: null,
   currentLocale: null,
   projects: [],
   keys: [],
-  saveTimers: {},
+  admins: [],
+
+  defaultLocaleName(code) {
+    const normalized = String(code || '').trim();
+    if (!normalized) return 'Unknown';
+
+    try {
+      if (normalized.includes('-')) {
+        const [language, ...rest] = normalized.split('-');
+        const suffix = rest.join('-');
+        const languageName = new Intl.DisplayNames(['en'], { type: 'language' }).of(language.toLowerCase());
+        const suffixName = suffix
+          ? new Intl.DisplayNames(['en'], { type: suffix.length === 4 ? 'script' : 'region' }).of(
+              suffix.length === 4 ? suffix : suffix.toUpperCase()
+            )
+          : '';
+
+        if (languageName && suffixName) return `${languageName} (${suffixName})`;
+      }
+
+      const languageName = new Intl.DisplayNames(['en'], { type: 'language' }).of(normalized.toLowerCase());
+      if (languageName) return languageName;
+    } catch (error) {
+      // Ignore Intl lookup failures and use a readable fallback.
+    }
+
+    return normalized
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  },
+
+  normalizeLocale(locale) {
+    if (typeof locale === 'string') {
+      const code = locale.trim();
+      return { code, name: this.defaultLocaleName(code) };
+    }
+
+    const code = String(locale && locale.code || '').trim();
+    return {
+      code,
+      name: String(locale && locale.name || '').trim() || this.defaultLocaleName(code)
+    };
+  },
+
+  getProjectLocales(project) {
+    return ((project || this.currentProject || {}).locales || [])
+      .map((locale) => this.normalizeLocale(locale))
+      .filter((locale) => locale.code);
+  },
 
   // ==================== API Helpers ====================
   async fetch(url, options = {}) {
+    const headers = { 'Content-Type': 'application/json', ...options.headers };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
     try {
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json', ...options.headers },
-        ...options
-      });
+      const res = await fetch(url, { headers, ...options });
+      if (res.status === 401) {
+        this.logout();
+        throw new Error('Session expired. Please log in again.');
+      }
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || `HTTP ${res.status}`);
@@ -25,14 +83,26 @@ const app = {
     }
   },
 
-  // ==================== Toast Notifications ====================
+  // ==================== Locale Helpers ====================
+  // Get array of locale codes from project
+  getLocaleCodes(project) {
+    return this.getProjectLocales(project).map((locale) => locale.code);
+  },
+
+  // Get locale name by code
+  getLocaleName(code, project) {
+    const locale = this.getProjectLocales(project).find((entry) => entry.code === code);
+    return locale ? locale.name : this.defaultLocaleName(code);
+  },
+
+  // ==================== Toast ====================
   toast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.textContent = message;
+    container.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
   },
 
   // ==================== Modal ====================
@@ -46,10 +116,216 @@ const app = {
     document.getElementById('modalOverlay').classList.remove('active');
   },
 
-  // ==================== Projects List ====================
+  // ==================== Auth ====================
+  setAuth(token, user) {
+    this.token = token;
+    this.user = user;
+    localStorage.setItem('th_token', token);
+    localStorage.setItem('th_user', JSON.stringify(user));
+  },
+
+  logout() {
+    this.token = null;
+    this.user = null;
+    localStorage.removeItem('th_token');
+    localStorage.removeItem('th_user');
+    this.showAuthScreen();
+  },
+
+  async showAuthScreen() {
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('authScreen').style.display = 'block';
+
+    try {
+      const status = await fetch(`${API}/auth/status`).then(r => r.json());
+      if (status.needsSetup) {
+        this.renderSetupPage();
+      } else {
+        this.renderLoginPage();
+      }
+    } catch (e) {
+      this.renderLoginPage();
+    }
+  },
+
+  renderLoginPage() {
+    document.getElementById('authScreen').innerHTML = `
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <div class="auth-logo">
+            <div class="icon"><i class="fa-solid fa-globe"></i></div>
+            <h1>TranslateHub</h1>
+            <p>Sign in to manage your translations</p>
+          </div>
+          <div class="auth-error" id="authError"></div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="loginUsername" placeholder="Enter your username" autofocus
+              onkeydown="if(event.key==='Enter')app.doLogin()">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="Enter your password"
+              onkeydown="if(event.key==='Enter')app.doLogin()">
+          </div>
+          <button class="btn-auth" onclick="app.doLogin()"><i class="fa-solid fa-right-to-bracket"></i> Sign In</button>
+        </div>
+      </div>
+    `;
+  },
+
+  renderSetupPage() {
+    document.getElementById('authScreen').innerHTML = `
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <div class="auth-logo">
+            <div class="icon"><i class="fa-solid fa-globe"></i></div>
+            <h1>TranslateHub</h1>
+            <p>Create your super admin account to get started</p>
+          </div>
+          <div class="auth-error" id="authError"></div>
+          <div class="form-group">
+            <label>Display Name</label>
+            <input type="text" id="setupDisplayName" placeholder="Your name" autofocus>
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="setupUsername" placeholder="Choose a username">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="setupPassword" placeholder="Choose a password (min 6 chars)"
+              onkeydown="if(event.key==='Enter')app.doSetup()">
+          </div>
+          <button class="btn-auth" onclick="app.doSetup()"><i class="fa-solid fa-user-shield"></i> Create Super Admin</button>
+        </div>
+      </div>
+    `;
+  },
+
+  async doLogin() {
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const errEl = document.getElementById('authError');
+
+    if (!username || !password) {
+      errEl.textContent = 'Please enter username and password';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    try {
+      errEl.classList.remove('visible');
+      const data = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      }).then(async r => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error);
+        return json;
+      });
+
+      this.setAuth(data.token, data.user);
+      this.showDashboard();
+    } catch (error) {
+      errEl.textContent = error.message;
+      errEl.classList.add('visible');
+    }
+  },
+
+  async doSetup() {
+    const displayName = document.getElementById('setupDisplayName').value.trim();
+    const username = document.getElementById('setupUsername').value.trim();
+    const password = document.getElementById('setupPassword').value;
+    const errEl = document.getElementById('authError');
+
+    if (!username || !password) {
+      errEl.textContent = 'Username and password are required';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    if (password.length < 6) {
+      errEl.textContent = 'Password must be at least 6 characters';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    try {
+      errEl.classList.remove('visible');
+      const data = await fetch(`${API}/auth/setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, displayName })
+      }).then(async r => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error);
+        return json;
+      });
+
+      this.setAuth(data.token, data.user);
+      this.toast('Super admin created! Welcome to TranslateHub.', 'success');
+      this.showDashboard();
+    } catch (error) {
+      errEl.textContent = error.message;
+      errEl.classList.add('visible');
+    }
+  },
+
+  // ==================== Dashboard ====================
+  showDashboard() {
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('headerUser').textContent = this.user.displayName || this.user.username;
+    this.renderSidebar();
+    this.navigate(this.currentPage);
+  },
+
+  renderSidebar() {
+    const isSuperAdmin = this.user.role === 'super_admin';
+    document.getElementById('sidebar').innerHTML = `
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Menu</div>
+        <div class="sidebar-item ${this.currentPage === 'projects' ? 'active' : ''}" onclick="app.navigate('projects')">
+          <i class="fa-solid fa-folder icon"></i> Projects
+        </div>
+        ${isSuperAdmin ? `
+        <div class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" onclick="app.navigate('admins')">
+          <i class="fa-solid fa-users icon"></i> Admins
+        </div>
+        ` : ''}
+        <div class="sidebar-item ${this.currentPage === 'docs' ? 'active' : ''}" onclick="app.navigate('docs')">
+          <i class="fa-solid fa-book icon"></i> Documentation
+        </div>
+      </div>
+    `;
+  },
+
+  navigate(page) {
+    this.currentPage = page;
+    this.currentProject = null;
+    this.currentLocale = null;
+    this.renderSidebar();
+
+    switch (page) {
+      case 'projects': this.showProjects(); break;
+      case 'admins': this.showAdmins(); break;
+      case 'docs': this.showDocs(); break;
+      default: this.showProjects();
+    }
+  },
+
+  render(html) {
+    document.getElementById('app').innerHTML = html;
+  },
+
+  // ==================== Projects ====================
   async showProjects() {
     this.currentProject = null;
-    this.projects = await this.fetch(`${API}/projects`);
+    try {
+      this.projects = await this.fetch(`${API}/projects`);
+    } catch (e) { return; }
     this.render(this.renderProjectsList());
   },
 
@@ -57,43 +333,45 @@ const app = {
     if (this.projects.length === 0) {
       return `
         <div class="empty-state">
-          <div class="empty-icon">&#127760;</div>
+          <div class="empty-icon"><i class="fa-solid fa-language"></i></div>
           <h3>No projects yet</h3>
           <p>Create your first translation project to get started.</p>
-          <button class="btn btn-primary" onclick="app.showCreateProjectModal()">+ New Project</button>
+          <button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>
         </div>
       `;
     }
 
-    const cards = this.projects.map(p => `
-      <div class="project-card" onclick="app.showProject('${p._id}')">
-        <h3>${this.esc(p.name)}</h3>
-        <div class="project-desc">${this.esc(p.description || 'No description')}</div>
-        <div class="project-meta">
-          <span>Source: <strong>${p.sourceLocale}</strong></span>
-          <span>${p.locales.length} locale${p.locales.length !== 1 ? 's' : ''}</span>
+    const cards = this.projects.map(p => {
+      const locales = this.getProjectLocales(p);
+      return `
+        <div class="project-card" onclick="app.showProject('${p._id}')">
+          <h3>${this.esc(p.name)}</h3>
+          <div class="project-desc">${this.esc(p.description || 'No description')}</div>
+          <div class="project-meta">
+            <span><i class="fa-solid fa-language"></i> Source: <strong>${p.sourceLocale}</strong></span>
+            <span><i class="fa-solid fa-earth-americas"></i> ${locales.length} locale${locales.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="locale-tags">
+            ${locales.map((locale) => `<span class="locale-tag">${this.esc(locale.code)} - ${this.esc(locale.name)}</span>`).join('')}
+          </div>
         </div>
-        <div class="locale-tags">
-          ${p.locales.map(l => `<span class="locale-tag">${l}</span>`).join('')}
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     return `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <h1 style="font-size:24px;font-weight:700">Projects</h1>
-        <button class="btn btn-primary" onclick="app.showCreateProjectModal()">+ New Project</button>
+        <button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>
       </div>
       <div class="project-grid">${cards}</div>
     `;
   },
 
-  // ==================== Create Project ====================
   showCreateProjectModal() {
     this.openModal(`
       <div class="modal-header">
         <h3>New Project</h3>
-        <button class="btn-icon" onclick="app.closeModal()">&times;</button>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -104,16 +382,24 @@ const app = {
           <label>Description</label>
           <textarea id="projectDesc" placeholder="Brief description of this project" rows="2"></textarea>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Source Locale</label>
-            <input type="text" id="projectSourceLocale" value="en" placeholder="en">
+        <div class="form-group">
+          <label>Source Locale</label>
+          <div class="form-row">
+            <div>
+              <input type="text" id="projectSourceCode" value="en" placeholder="Code (e.g. en-US)">
+            </div>
+            <div>
+              <input type="text" id="projectSourceName" value="English" placeholder="Name (e.g. English)">
+            </div>
           </div>
-          <div class="form-group">
-            <label>Target Locales</label>
-            <input type="text" id="projectLocales" placeholder="fr, de, es, ja">
-            <div class="form-hint">Comma-separated locale codes</div>
-          </div>
+        </div>
+        <div class="form-group">
+          <label>Target Locales</label>
+          <div id="targetLocaleRows"></div>
+          <button class="btn btn-sm" style="margin-top:8px" onclick="app.addLocaleRow()">
+            <i class="fa-solid fa-plus"></i> Add Locale
+          </button>
+          <div class="form-hint">Add each target language with a code and display name.</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -121,44 +407,75 @@ const app = {
         <button class="btn btn-primary" onclick="app.createProject()">Create Project</button>
       </div>
     `);
+    this.addLocaleRow();
+  },
+
+  addLocaleRow() {
+    const container = document.getElementById('targetLocaleRows');
+    const row = document.createElement('div');
+    row.className = 'form-row locale-entry-row';
+    row.style.marginBottom = '8px';
+    row.innerHTML = `
+      <div><input type="text" class="locale-code-input" placeholder="Code (e.g. fr, de, fa)"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" class="locale-name-input" placeholder="Name (e.g. French)" style="flex:1">
+        <button class="btn-icon" onclick="this.closest('.locale-entry-row').remove()" title="Remove">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    `;
+    container.appendChild(row);
   },
 
   async createProject() {
     const name = document.getElementById('projectName').value.trim();
     const description = document.getElementById('projectDesc').value.trim();
-    const sourceLocale = document.getElementById('projectSourceLocale').value.trim() || 'en';
-    const localesRaw = document.getElementById('projectLocales').value.trim();
+    const sourceCode = document.getElementById('projectSourceCode').value.trim() || 'en';
+    const sourceName = document.getElementById('projectSourceName').value.trim() || 'English';
 
     if (!name) return this.toast('Project name is required', 'error');
 
-    const locales = [sourceLocale, ...localesRaw.split(',').map(l => l.trim()).filter(l => l && l !== sourceLocale)];
+    const locales = this.collectLocales('.locale-entry-row', '.locale-code-input', '.locale-name-input', {
+      sourceCode,
+      sourceName
+    });
+
+    if (!locales) return;
 
     try {
       const project = await this.fetch(`${API}/projects`, {
         method: 'POST',
-        body: JSON.stringify({ name, description, sourceLocale, locales })
+        body: JSON.stringify({ name, description, sourceLocale: sourceCode, locales })
       });
       this.closeModal();
       this.toast('Project created!', 'success');
       this.showProject(project._id);
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
   },
 
   // ==================== Project Detail ====================
   async showProject(projectId) {
-    this.currentProject = await this.fetch(`${API}/projects/${projectId}`);
-    this.keys = await this.fetch(`${API}/projects/${projectId}/keys`);
-    this.currentLocale = this.currentProject.locales.find(l => l !== this.currentProject.sourceLocale) || this.currentProject.sourceLocale;
+    try {
+      this.currentProject = await this.fetch(`${API}/projects/${projectId}`);
+      this.keys = await this.fetch(`${API}/projects/${projectId}/keys`);
+    } catch (e) { return; }
+
+    const codes = this.getLocaleCodes();
+    // Only reset currentLocale if not set or not valid for this project
+    if (!this.currentLocale || !codes.includes(this.currentLocale)) {
+      this.currentLocale = codes.find(c => c !== this.currentProject.sourceLocale) || this.currentProject.sourceLocale;
+    }
     this.render(this.renderProjectDetail());
   },
 
   renderProjectDetail() {
     const p = this.currentProject;
     const stats = p.stats || {};
+    const locales = this.getProjectLocales(p);
 
-    const statsHtml = Object.entries(stats).map(([locale, s]) => `
+    const statsHtml = Object.entries(stats).map(([code, s]) => `
       <div class="stat-card">
-        <div class="stat-locale">${locale} ${locale === p.sourceLocale ? '(source)' : ''}</div>
+        <div class="stat-locale">${this.esc(s.name || code)} ${code === p.sourceLocale ? '(source)' : ''}</div>
         <div class="stat-count">${s.translated}/${s.total} (${s.percentage}%)</div>
         <div class="progress-bar">
           <div class="progress-fill ${s.percentage === 100 ? 'complete' : ''}" style="width:${s.percentage}%"></div>
@@ -166,15 +483,16 @@ const app = {
       </div>
     `).join('');
 
-    const localeOptions = p.locales.map(l =>
-      `<option value="${l}" ${l === this.currentLocale ? 'selected' : ''}>${l}${l === p.sourceLocale ? ' (source)' : ''}</option>`
+    const localeOptions = locales.map((locale) =>
+      `<option value="${this.esc(locale.code)}" ${locale.code === this.currentLocale ? 'selected' : ''}>${this.esc(locale.name)} (${this.esc(locale.code)})${locale.code === p.sourceLocale ? ' - source' : ''}</option>`
     ).join('');
 
     const rows = this.keys.map(k => this.renderKeyRow(k)).join('');
+    const curLocaleName = this.getLocaleName(this.currentLocale);
 
     return `
       <div class="breadcrumb">
-        <a onclick="app.showProjects()">Projects</a>
+        <a onclick="app.navigate('projects')">Projects</a>
         <span>/</span>
         <span>${this.esc(p.name)}</span>
       </div>
@@ -185,38 +503,41 @@ const app = {
           <p style="color:var(--gray-500);font-size:14px;margin-top:4px">${this.esc(p.description || '')}</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="app.showApiKeyModal()">API Key</button>
-          <button class="btn btn-sm" onclick="app.showProjectSettingsModal()">Settings</button>
-          <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()">Delete</button>
+          <button class="btn btn-sm" onclick="app.showApiKeyModal()"><i class="fa-solid fa-key"></i> API Key</button>
+          <button class="btn btn-sm" onclick="app.showProjectSettingsModal()"><i class="fa-solid fa-gear"></i> Settings</button>
+          <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()"><i class="fa-solid fa-trash"></i> Delete</button>
         </div>
       </div>
 
-      <!-- Stats -->
       <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2>Translation Progress</h2></div>
+        <div class="card-header"><h2><i class="fa-solid fa-chart-bar"></i> Translation Progress</h2></div>
         <div class="card-body">
           <div class="stats-grid">${statsHtml || '<p style="color:var(--gray-500)">Add some translation keys to see progress.</p>'}</div>
         </div>
       </div>
 
-      <!-- Translations -->
       <div class="card">
         <div class="translation-toolbar">
-          <input type="text" class="search-input" placeholder="Search keys..." oninput="app.filterKeys(this.value)" id="searchInput">
-          <select class="locale-selector" onchange="app.changeLocale(this.value)">
-            ${localeOptions}
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="app.showAddKeyModal()">+ Add Key</button>
-          <button class="btn btn-sm" onclick="app.showBulkAddModal()">Bulk Import</button>
+          <input type="text" class="search-input" placeholder="Search keys..." oninput="app.filterKeys(this.value)">
+          <div class="select-wrap locale-selector-wrap">
+            <select class="locale-selector" onchange="app.changeLocale(this.value)">${localeOptions}</select>
+            <i class="fa-solid fa-chevron-down select-icon"></i>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="app.showAddKeyModal()"><i class="fa-solid fa-plus"></i> Add Key</button>
+          <button class="btn btn-sm" onclick="app.showBulkAddModal()"><i class="fa-solid fa-file-import"></i> Bulk Import</button>
         </div>
         <div id="keysTableContainer">
           ${this.keys.length === 0
-            ? '<div class="empty-state"><div class="empty-icon">&#128221;</div><h3>No translation keys</h3><p>Add keys to start translating your app.</p></div>'
+            ? '<div class="empty-state"><div class="empty-icon"><i class="fa-solid fa-file-lines"></i></div><h3>No translation keys</h3><p>Add keys to start translating your app.</p></div>'
             : `<table class="translation-table">
-                <thead><tr><th style="width:30%">Key</th><th>Source (${p.sourceLocale})</th><th>Translation (${this.currentLocale})</th><th style="width:60px"></th></tr></thead>
+                <thead><tr>
+                  <th style="width:30%">Key</th>
+                  <th>Source (${this.getLocaleName(p.sourceLocale)})</th>
+                  <th>Translation (${this.esc(curLocaleName)})</th>
+                  <th style="width:60px"></th>
+                </tr></thead>
                 <tbody id="keysBody">${rows}</tbody>
-              </table>`
-          }
+              </table>`}
         </div>
       </div>
     `;
@@ -224,18 +545,14 @@ const app = {
 
   renderKeyRow(k) {
     const p = this.currentProject;
-    const sourceVal = k.translations?.[p.sourceLocale] || (k.translations instanceof Map ? '' : (k.translations?.get?.(p.sourceLocale) || ''));
-    const transVal = k.translations?.[this.currentLocale] || '';
-
-    // Handle both plain object and Map serialization from MongoDB
-    const getTranslation = (translations, locale) => {
+    const getT = (translations, locale) => {
       if (!translations) return '';
       if (translations instanceof Map) return translations.get(locale) || '';
       return translations[locale] || '';
     };
 
-    const src = getTranslation(k.translations, p.sourceLocale);
-    const trans = getTranslation(k.translations, this.currentLocale);
+    const src = getT(k.translations, p.sourceLocale);
+    const trans = getT(k.translations, this.currentLocale);
 
     return `
       <tr data-key-id="${k._id}" data-key="${this.esc(k.key)}">
@@ -244,25 +561,19 @@ const app = {
           ${k.description ? `<div class="key-desc">${this.esc(k.description)}</div>` : ''}
         </td>
         <td>
-          <input class="translation-input ${!src ? 'empty' : ''}"
-            value="${this.esc(src)}"
-            placeholder="Source text..."
-            data-locale="${p.sourceLocale}"
-            data-key-id="${k._id}"
+          <input class="translation-input ${!src ? 'empty' : ''}" value="${this.esc(src)}"
+            placeholder="Source text..." data-locale="${p.sourceLocale}" data-key-id="${k._id}"
             onchange="app.saveTranslation('${k._id}', '${p.sourceLocale}', this.value, this)">
         </td>
         <td>
           ${this.currentLocale !== p.sourceLocale ? `
-            <input class="translation-input ${!trans ? 'empty' : ''}"
-              value="${this.esc(trans)}"
-              placeholder="Enter translation..."
-              data-locale="${this.currentLocale}"
-              data-key-id="${k._id}"
+            <input class="translation-input ${!trans ? 'empty' : ''}" value="${this.esc(trans)}"
+              placeholder="Enter translation..." data-locale="${this.currentLocale}" data-key-id="${k._id}"
               onchange="app.saveTranslation('${k._id}', '${this.currentLocale}', this.value, this)">
           ` : '<span style="color:var(--gray-400);font-size:13px">Same as source</span>'}
         </td>
         <td class="actions-cell">
-          <button class="btn-icon" onclick="app.confirmDeleteKey('${k._id}', '${this.esc(k.key)}')" title="Delete key">&#128465;</button>
+          <button class="btn-icon" onclick="app.confirmDeleteKey('${k._id}', '${this.esc(k.key)}')" title="Delete key"><i class="fa-solid fa-trash"></i></button>
         </td>
       </tr>
     `;
@@ -279,42 +590,41 @@ const app = {
         inputEl.classList.add('saved');
         setTimeout(() => inputEl.classList.remove('saved'), 1500);
       }
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
   },
 
   changeLocale(locale) {
     this.currentLocale = locale;
-    this.showProject(this.currentProject._id);
+    this.render(this.renderProjectDetail());
   },
 
   filterKeys(search) {
     const rows = document.querySelectorAll('#keysBody tr');
     const q = search.toLowerCase();
     rows.forEach(row => {
-      const key = row.dataset.key.toLowerCase();
-      row.style.display = key.includes(q) ? '' : 'none';
+      row.style.display = row.dataset.key.toLowerCase().includes(q) ? '' : 'none';
     });
   },
 
-  // ==================== Add Key ====================
   showAddKeyModal() {
+    const srcName = this.getLocaleName(this.currentProject.sourceLocale);
     this.openModal(`
       <div class="modal-header">
         <h3>Add Translation Key</h3>
-        <button class="btn-icon" onclick="app.closeModal()">&times;</button>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
           <label>Key</label>
           <input type="text" id="newKey" placeholder="e.g. welcome.title" autofocus>
-          <div class="form-hint">Use dot notation for organization (e.g. nav.home, auth.login)</div>
+          <div class="form-hint">Use dot notation (e.g. nav.home, auth.login)</div>
         </div>
         <div class="form-group">
           <label>Description (optional)</label>
           <input type="text" id="newKeyDesc" placeholder="Context for translators">
         </div>
         <div class="form-group">
-          <label>Source text (${this.currentProject.sourceLocale})</label>
+          <label>Source text (${this.esc(srcName)})</label>
           <textarea id="newKeyValue" placeholder="Enter the source text" rows="2"></textarea>
         </div>
       </div>
@@ -329,7 +639,6 @@ const app = {
     const key = document.getElementById('newKey').value.trim();
     const description = document.getElementById('newKeyDesc').value.trim();
     const value = document.getElementById('newKeyValue').value.trim();
-
     if (!key) return this.toast('Key is required', 'error');
 
     const translations = {};
@@ -343,21 +652,21 @@ const app = {
       this.closeModal();
       this.toast('Key added!', 'success');
       this.showProject(this.currentProject._id);
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
   },
 
-  // ==================== Bulk Import ====================
   showBulkAddModal() {
+    const srcName = this.getLocaleName(this.currentProject.sourceLocale);
     this.openModal(`
       <div class="modal-header">
         <h3>Bulk Import Keys</h3>
-        <button class="btn-icon" onclick="app.closeModal()">&times;</button>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Paste JSON (${this.currentProject.sourceLocale})</label>
-          <textarea id="bulkJson" rows="10" placeholder='{\n  "welcome.title": "Welcome",\n  "welcome.subtitle": "Get started",\n  "nav.home": "Home"\n}'></textarea>
-          <div class="form-hint">Flat key-value JSON object. Keys will be created and source text set.</div>
+          <label>Paste JSON (${this.esc(srcName)})</label>
+          <textarea id="bulkJson" rows="10" placeholder='{\n  "welcome.title": "Welcome",\n  "nav.home": "Home"\n}'></textarea>
+          <div class="form-hint">Flat key-value JSON object.</div>
         </div>
       </div>
       <div class="modal-footer">
@@ -370,35 +679,27 @@ const app = {
   async bulkImport() {
     const raw = document.getElementById('bulkJson').value.trim();
     if (!raw) return this.toast('Paste JSON first', 'error');
-
     let data;
-    try { data = JSON.parse(raw); } catch (e) {
-      return this.toast('Invalid JSON', 'error');
-    }
-
+    try { data = JSON.parse(raw); } catch (e) { return this.toast('Invalid JSON', 'error'); }
     const keys = Object.entries(data).map(([key, value]) => ({
-      key,
-      translations: { [this.currentProject.sourceLocale]: String(value) }
+      key, translations: { [this.currentProject.sourceLocale]: String(value) }
     }));
-
     try {
       const result = await this.fetch(`${API}/projects/${this.currentProject._id}/keys/bulk`, {
-        method: 'POST',
-        body: JSON.stringify({ keys })
+        method: 'POST', body: JSON.stringify({ keys })
       });
       this.closeModal();
       this.toast(`Imported: ${result.created} created, ${result.updated} updated`, 'success');
       this.showProject(this.currentProject._id);
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
   },
 
-  // ==================== API Key Modal ====================
   showApiKeyModal() {
     const p = this.currentProject;
     this.openModal(`
       <div class="modal-header">
-        <h3>API Key</h3>
-        <button class="btn-icon" onclick="app.closeModal()">&times;</button>
+        <h3><i class="fa-solid fa-key"></i> API Key</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
         <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
@@ -406,18 +707,18 @@ const app = {
         </p>
         <div class="api-key-box">
           <code id="apiKeyDisplay">${p.apiKey}</code>
-          <button class="btn btn-sm" onclick="app.copyApiKey()">Copy</button>
+          <button class="btn btn-sm" onclick="app.copyApiKey()"><i class="fa-solid fa-copy"></i> Copy</button>
         </div>
         <div style="margin-top:20px;padding:16px;background:var(--gray-50);border-radius:6px;font-size:13px">
           <strong>Usage Example:</strong>
-          <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all"><code>fetch('${window.location.origin}/api/v1/translations/en', {
+          <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all"><code>fetch('${window.location.origin}/api/v1/translations/${p.sourceLocale}', {
   headers: { 'X-API-Key': '${p.apiKey}' }
 })
 .then(res => res.json())
 .then(data => console.log(data.translations));</code></pre>
         </div>
         <div style="margin-top:12px">
-          <button class="btn btn-sm btn-danger" onclick="app.regenerateApiKey()">Regenerate Key</button>
+          <button class="btn btn-sm btn-danger" onclick="app.regenerateApiKey()"><i class="fa-solid fa-rotate"></i> Regenerate Key</button>
         </div>
       </div>
     `);
@@ -435,16 +736,25 @@ const app = {
       this.currentProject.apiKey = result.apiKey;
       document.getElementById('apiKeyDisplay').textContent = result.apiKey;
       this.toast('API key regenerated', 'success');
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
   },
 
-  // ==================== Project Settings ====================
   showProjectSettingsModal() {
     const p = this.currentProject;
+    const localeRows = this.getProjectLocales(p).map((locale) => `
+      <div class="form-row locale-setting-row" style="margin-bottom:8px" data-is-source="${locale.code === p.sourceLocale}">
+        <div><input type="text" class="setting-locale-code" value="${this.esc(locale.code)}" placeholder="Code" ${locale.code === p.sourceLocale ? 'readonly style="background:var(--gray-100)"' : ''}></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" class="setting-locale-name" value="${this.esc(locale.name)}" placeholder="Name" style="flex:1">
+          ${locale.code !== p.sourceLocale ? `<button class="btn-icon" onclick="this.closest('.locale-setting-row').remove()" title="Remove"><i class="fa-solid fa-trash"></i></button>` : '<div style="width:30px"></div>'}
+        </div>
+      </div>
+    `).join('');
+
     this.openModal(`
       <div class="modal-header">
-        <h3>Project Settings</h3>
-        <button class="btn-icon" onclick="app.closeModal()">&times;</button>
+        <h3><i class="fa-solid fa-gear"></i> Project Settings</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -457,8 +767,11 @@ const app = {
         </div>
         <div class="form-group">
           <label>Locales</label>
-          <input type="text" id="editLocales" value="${p.locales.join(', ')}">
-          <div class="form-hint">Comma-separated. Source locale (${p.sourceLocale}) will always be included.</div>
+          <div class="form-hint" style="margin-bottom:8px">Source locale (${p.sourceLocale}) code cannot be changed.</div>
+          <div id="settingsLocaleRows">${localeRows}</div>
+          <button class="btn btn-sm" style="margin-top:8px" onclick="app.addSettingsLocaleRow()">
+            <i class="fa-solid fa-plus"></i> Add Locale
+          </button>
         </div>
       </div>
       <div class="modal-footer">
@@ -468,38 +781,50 @@ const app = {
     `);
   },
 
+  addSettingsLocaleRow() {
+    const container = document.getElementById('settingsLocaleRows');
+    const row = document.createElement('div');
+    row.className = 'form-row locale-setting-row';
+    row.style.marginBottom = '8px';
+    row.innerHTML = `
+      <div><input type="text" class="setting-locale-code" placeholder="Code (e.g. ja)"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" class="setting-locale-name" placeholder="Name (e.g. Japanese)" style="flex:1">
+        <button class="btn-icon" onclick="this.closest('.locale-setting-row').remove()" title="Remove"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    `;
+    container.appendChild(row);
+  },
+
   async updateProject() {
     const name = document.getElementById('editName').value.trim();
     const description = document.getElementById('editDesc').value.trim();
-    const localesRaw = document.getElementById('editLocales').value.trim();
-    const p = this.currentProject;
-
     if (!name) return this.toast('Name is required', 'error');
 
-    const locales = [...new Set([
-      p.sourceLocale,
-      ...localesRaw.split(',').map(l => l.trim()).filter(Boolean)
-    ])];
+    const locales = this.collectLocales('.locale-setting-row', '.setting-locale-code', '.setting-locale-name', {
+      sourceCode: this.currentProject.sourceLocale,
+      sourceName: this.getLocaleName(this.currentProject.sourceLocale)
+    });
+
+    if (!locales) return;
 
     try {
-      await this.fetch(`${API}/projects/${p._id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name, description, locales })
+      await this.fetch(`${API}/projects/${this.currentProject._id}`, {
+        method: 'PUT', body: JSON.stringify({ name, description, locales })
       });
       this.closeModal();
       this.toast('Project updated!', 'success');
-      this.showProject(p._id);
-    } catch (e) { /* already toasted */ }
+      this.showProject(this.currentProject._id);
+    } catch (e) {}
   },
 
-  // ==================== Delete ====================
   async confirmDeleteProject() {
-    if (!confirm(`Delete project "${this.currentProject.name}" and all its translations? This cannot be undone.`)) return;
+    if (!confirm(`Delete project "${this.currentProject.name}" and all its translations?`)) return;
     try {
       await this.fetch(`${API}/projects/${this.currentProject._id}`, { method: 'DELETE' });
       this.toast('Project deleted', 'success');
-      this.showProjects();
-    } catch (e) { /* already toasted */ }
+      this.navigate('projects');
+    } catch (e) {}
   },
 
   async confirmDeleteKey(keyId, keyName) {
@@ -508,25 +833,447 @@ const app = {
       await this.fetch(`${API}/projects/${this.currentProject._id}/keys/${keyId}`, { method: 'DELETE' });
       this.toast('Key deleted', 'success');
       this.showProject(this.currentProject._id);
-    } catch (e) { /* already toasted */ }
+    } catch (e) {}
+  },
+
+  // ==================== Admins ====================
+  async showAdmins() {
+    if (this.user.role !== 'super_admin') {
+      return this.render('<div class="empty-state"><h3>Access Denied</h3><p>Only super admins can manage users.</p></div>');
+    }
+    try {
+      this.admins = await this.fetch(`${API}/admins`);
+    } catch (e) { return; }
+    this.render(this.renderAdminsPage());
+  },
+
+  renderAdminsPage() {
+    const rows = this.admins.map(a => `
+      <tr>
+        <td><strong>${this.esc(a.displayName || a.username)}</strong></td>
+        <td><code style="font-size:13px">${this.esc(a.username)}</code></td>
+        <td><span class="role-badge ${a.role}">${a.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span></td>
+        <td><span class="status-badge ${a.active ? 'active' : 'inactive'}">${a.active ? 'Active' : 'Inactive'}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-sm" onclick="app.showEditAdminModal('${a._id}')"><i class="fa-solid fa-pen"></i> Edit</button>
+          ${a._id !== this.user._id ? `<button class="btn btn-sm btn-danger" onclick="app.confirmDeleteAdmin('${a._id}', '${this.esc(a.username)}')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h1 style="font-size:24px;font-weight:700">Admin Users</h1>
+        <button class="btn btn-primary" onclick="app.showCreateAdminModal()"><i class="fa-solid fa-user-plus"></i> New Admin</button>
+      </div>
+      <div class="card">
+        <table class="admin-table">
+          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  },
+
+  showCreateAdminModal() {
+    this.openModal(`
+      <div class="modal-header">
+        <h3>New Admin</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Display Name</label>
+          <input type="text" id="adminDisplayName" placeholder="John Doe" autofocus>
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="adminUsername" placeholder="johndoe">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="adminPassword" placeholder="Min 6 characters">
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="adminRole">
+            <option value="admin">Admin</option>
+            <option value="super_admin">Super Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="app.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="app.createAdmin()">Create Admin</button>
+      </div>
+    `);
+  },
+
+  async createAdmin() {
+    const displayName = document.getElementById('adminDisplayName').value.trim();
+    const username = document.getElementById('adminUsername').value.trim();
+    const password = document.getElementById('adminPassword').value;
+    const role = document.getElementById('adminRole').value;
+
+    if (!username || !password) return this.toast('Username and password required', 'error');
+    if (password.length < 6) return this.toast('Password must be at least 6 characters', 'error');
+
+    try {
+      await this.fetch(`${API}/admins`, {
+        method: 'POST',
+        body: JSON.stringify({ username, password, displayName, role })
+      });
+      this.closeModal();
+      this.toast('Admin created!', 'success');
+      this.showAdmins();
+    } catch (e) {}
+  },
+
+  showEditAdminModal(adminId) {
+    const a = this.admins.find(x => x._id === adminId);
+    if (!a) return;
+
+    this.openModal(`
+      <div class="modal-header">
+        <h3>Edit Admin</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Display Name</label>
+          <input type="text" id="editAdminDisplayName" value="${this.esc(a.displayName || '')}">
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="editAdminRole">
+            <option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Admin</option>
+            <option value="super_admin" ${a.role === 'super_admin' ? 'selected' : ''}>Super Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="editAdminActive">
+            <option value="true" ${a.active ? 'selected' : ''}>Active</option>
+            <option value="false" ${!a.active ? 'selected' : ''}>Inactive</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>New Password (leave blank to keep current)</label>
+          <input type="password" id="editAdminPassword" placeholder="Leave blank to keep unchanged">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="app.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="app.updateAdmin('${a._id}')">Save</button>
+      </div>
+    `);
+  },
+
+  async updateAdmin(adminId) {
+    const displayName = document.getElementById('editAdminDisplayName').value.trim();
+    const role = document.getElementById('editAdminRole').value;
+    const active = document.getElementById('editAdminActive').value === 'true';
+    const password = document.getElementById('editAdminPassword').value;
+
+    const body = { displayName, role, active };
+    if (password) body.password = password;
+
+    try {
+      await this.fetch(`${API}/admins/${adminId}`, { method: 'PUT', body: JSON.stringify(body) });
+      this.closeModal();
+      this.toast('Admin updated!', 'success');
+      this.showAdmins();
+    } catch (e) {}
+  },
+
+  async confirmDeleteAdmin(adminId, username) {
+    if (!confirm(`Delete admin "${username}"? This cannot be undone.`)) return;
+    try {
+      await this.fetch(`${API}/admins/${adminId}`, { method: 'DELETE' });
+      this.toast('Admin deleted', 'success');
+      this.showAdmins();
+    } catch (e) {}
+  },
+
+  // ==================== Documentation ====================
+  showDocs() {
+    this.render(`
+      <div class="docs-content">
+        <h1><i class="fa-solid fa-book"></i> TranslateHub Documentation</h1>
+        <p>TranslateHub is a translation management platform that lets you manage your application's translations externally. Your client apps fetch translations at runtime via a REST API, so you never need to redeploy to update text.</p>
+
+        <h2>Getting Started</h2>
+
+        <h3>1. Create a Project</h3>
+        <p>Go to the <strong>Projects</strong> page and click <strong>"+ New Project"</strong>. Fill in:</p>
+        <ul>
+          <li><strong>Project Name</strong> &ndash; A human-readable name for your app or service</li>
+          <li><strong>Source Locale</strong> &ndash; The primary language with a code and name (e.g. code: <code>en-US</code>, name: <code>United States</code>)</li>
+          <li><strong>Target Locales</strong> &ndash; Each language gets a code + name (e.g. code: <code>fa</code>, name: <code>Persian</code>)</li>
+        </ul>
+        <p>Locale codes can use any format you prefer: <code>en</code>, <code>en-US</code>, <code>en-UK</code>, <code>fr</code>, <code>fa</code>, etc. Each project gets its own <strong>API Key</strong> for client app integration.</p>
+
+        <h3>2. Add Translation Keys</h3>
+        <p>Translation keys are identifiers your app uses to reference specific text. We recommend <strong>dot notation</strong> for organization:</p>
+        <pre><code>common.welcome       = "Welcome to our app!"
+nav.home             = "Home"
+nav.settings         = "Settings"
+auth.login.title     = "Sign In"
+auth.login.email     = "Email Address"
+errors.notFound      = "Page not found"</code></pre>
+        <p>You can add keys one at a time via <strong>"+ Add Key"</strong>, or import many at once with <strong>"Bulk Import"</strong> by pasting a JSON object:</p>
+        <pre><code>{
+  "common.welcome": "Welcome to our app!",
+  "nav.home": "Home",
+  "nav.settings": "Settings"
+}</code></pre>
+
+        <h3>3. Translate</h3>
+        <p>On the project detail page, use the <strong>locale selector</strong> dropdown to switch between languages. Click into any translation cell to type the translated text. Changes save automatically when you leave the field.</p>
+        <p>The <strong>Translation Progress</strong> section shows completion percentage for each locale.</p>
+
+        <h2>Integrating with Your Application</h2>
+
+        <h3>Getting Your API Key</h3>
+        <p>Open your project, click <strong>"API Key"</strong>, and copy the key. It looks like: <code>th_a1b2c3d4e5...</code></p>
+
+        <div class="docs-callout info">
+          <strong>Important:</strong> The API key identifies your project. Keep it in environment variables, not in source code.
+        </div>
+
+        <h3>REST API Endpoints</h3>
+        <p>All public endpoints require the <code>X-API-Key</code> header.</p>
+
+        <h3>Fetch translations for a single locale</h3>
+        <pre><code>GET /api/v1/translations/:localeCode
+
+// Example: fetch French translations
+GET /api/v1/translations/fr
+Headers: { "X-API-Key": "th_your_key_here" }
+
+// Response
+{
+  "locale": "fr",
+  "localeName": "French",
+  "projectId": "...",
+  "translations": {
+    "common.welcome": "Bienvenue dans notre application !",
+    "nav.home": "Accueil"
+  }
+}</code></pre>
+        <p>If a key is not translated in the requested locale, the source locale value is returned as fallback.</p>
+
+        <h3>Fetch all translations (all locales)</h3>
+        <pre><code>GET /api/v1/translations
+
+// Response
+{
+  "projectId": "...",
+  "locales": [
+    { "code": "en-US", "name": "United States" },
+    { "code": "fr", "name": "French" }
+  ],
+  "sourceLocale": "en-US",
+  "translations": {
+    "en-US": { "common.welcome": "Welcome!", ... },
+    "fr": { "common.welcome": "Bienvenue !", ... }
+  }
+}</code></pre>
+
+        <h3>Get available locales</h3>
+        <pre><code>GET /api/v1/locales
+
+// Response
+{
+  "sourceLocale": "en-US",
+  "locales": [
+    { "code": "en-US", "name": "United States" },
+    { "code": "fr", "name": "French" },
+    { "code": "fa", "name": "Persian" }
+  ]
+}</code></pre>
+
+        <h2>Integration Examples</h2>
+
+        <h3>JavaScript / React</h3>
+        <pre><code>// i18n.js - Simple translation loader
+const API_URL = 'https://your-server.com/api/v1';
+const API_KEY = process.env.TRANSLATE_HUB_KEY;
+
+let translations = {};
+
+export async function loadTranslations(locale = 'en') {
+  const res = await fetch(\`\${API_URL}/translations/\${locale}\`, {
+    headers: { 'X-API-Key': API_KEY }
+  });
+  const data = await res.json();
+  translations = data.translations;
+}
+
+export function t(key, fallback = key) {
+  return translations[key] || fallback;
+}
+
+// Usage:
+// await loadTranslations('fr');
+// t('common.welcome') => "Bienvenue !"</code></pre>
+
+        <h3>Node.js / Express</h3>
+        <pre><code>const axios = require('axios');
+
+const cache = {};
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getTranslations(locale) {
+  const now = Date.now();
+  if (cache[locale] && now - cache[locale].time < CACHE_TTL) {
+    return cache[locale].data;
+  }
+
+  const res = await axios.get(
+    \`http://localhost:3000/api/v1/translations/\${locale}\`,
+    { headers: { 'X-API-Key': process.env.TRANSLATE_HUB_KEY } }
+  );
+
+  cache[locale] = { data: res.data.translations, time: now };
+  return res.data.translations;
+}
+
+// Express middleware
+module.exports = async (req, res, next) => {
+  const locale = req.query.lang || 'en';
+  req.t = await getTranslations(locale);
+  next();
+};</code></pre>
+
+        <h3>Python / Flask</h3>
+        <pre><code>import requests
+from functools import lru_cache
+
+API_URL = "http://localhost:3000/api/v1"
+API_KEY = "th_your_key_here"
+
+@lru_cache(maxsize=32)
+def get_translations(locale="en"):
+    res = requests.get(
+        f"{API_URL}/translations/{locale}",
+        headers={"X-API-Key": API_KEY}
+    )
+    return res.json()["translations"]
+
+def t(key, locale="en"):
+    return get_translations(locale).get(key, key)</code></pre>
+
+        <h2>Admin Management</h2>
+        <p>Super admins can manage other admin users from the <strong>Admins</strong> page in the sidebar.</p>
+        <ul>
+          <li><strong>Super Admin</strong> &ndash; Full access: manage projects, translations, and other admins</li>
+          <li><strong>Admin</strong> &ndash; Can manage projects and translations, but cannot manage other users</li>
+        </ul>
+        <p>Admins can be deactivated (instead of deleted) to temporarily revoke access without losing their account.</p>
+
+        <h2>Locale Codes</h2>
+        <p>TranslateHub supports any locale code format you prefer. Common conventions:</p>
+        <ul>
+          <li><code>en</code>, <code>fr</code>, <code>de</code> &ndash; Simple ISO 639-1 language codes</li>
+          <li><code>en-US</code>, <code>en-UK</code>, <code>pt-BR</code> &ndash; Language + region (IETF BCP 47)</li>
+          <li><code>fa</code>, <code>ar</code>, <code>zh-Hans</code> &ndash; Right-to-left and script variants</li>
+        </ul>
+        <p>Each locale also has a <strong>display name</strong> (e.g. "United States", "Persian") that appears in the dashboard for easy identification.</p>
+
+        <h2>Best Practices</h2>
+        <ul>
+          <li><strong>Use dot notation</strong> for keys (e.g. <code>auth.login.title</code>) to keep translations organized</li>
+          <li><strong>Add descriptions</strong> to keys to give translators context about where the text appears</li>
+          <li><strong>Cache translations</strong> on the client side and refresh periodically (the API sets a 5-minute cache header)</li>
+          <li><strong>Use fallback logic</strong> &ndash; if a translation is missing, fall back to the source locale</li>
+          <li><strong>Keep API keys secret</strong> &ndash; store them in environment variables</li>
+          <li><strong>Regenerate API keys</strong> if they are ever exposed publicly</li>
+        </ul>
+
+        <h2>API Reference Summary</h2>
+        <div class="card" style="margin-top:12px">
+          <table class="admin-table">
+            <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>GET</code></td><td><code>/api/v1/translations/:locale</code></td><td>API Key</td><td>Get translations for one locale</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/v1/translations</code></td><td>API Key</td><td>Get all translations for all locales</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/v1/locales</code></td><td>API Key</td><td>Get available locales with names</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/auth/status</code></td><td>None</td><td>Check if setup is needed</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/auth/setup</code></td><td>None</td><td>Create initial super admin</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/auth/login</code></td><td>None</td><td>Login and get JWT token</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/projects</code></td><td>JWT</td><td>List all projects</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/projects</code></td><td>JWT</td><td>Create a new project</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Get project details + stats</td></tr>
+              <tr><td><code>PUT</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Update a project</td></tr>
+              <tr><td><code>DELETE</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Delete project and all keys</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/projects/:id/keys</code></td><td>JWT</td><td>List translation keys</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/projects/:id/keys</code></td><td>JWT</td><td>Add a translation key</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/projects/:id/keys/bulk</code></td><td>JWT</td><td>Bulk import keys</td></tr>
+              <tr><td><code>PATCH</code></td><td><code>/api/projects/:id/keys/:keyId/translate</code></td><td>JWT</td><td>Update single translation</td></tr>
+              <tr><td><code>DELETE</code></td><td><code>/api/projects/:id/keys/:keyId</code></td><td>JWT</td><td>Delete a translation key</td></tr>
+              <tr><td><code>GET</code></td><td><code>/api/admins</code></td><td>JWT (Super)</td><td>List all admins</td></tr>
+              <tr><td><code>POST</code></td><td><code>/api/admins</code></td><td>JWT (Super)</td><td>Create a new admin</td></tr>
+              <tr><td><code>PUT</code></td><td><code>/api/admins/:id</code></td><td>JWT (Super)</td><td>Update an admin</td></tr>
+              <tr><td><code>DELETE</code></td><td><code>/api/admins/:id</code></td><td>JWT (Super)</td><td>Delete an admin</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `);
   },
 
   // ==================== Helpers ====================
+  collectLocales(rowSelector, codeSelector, nameSelector, { sourceCode, sourceName }) {
+    const uniqueLocales = new Map();
+    const normalizedSourceCode = String(sourceCode || 'en').trim() || 'en';
+    const normalizedSourceName = String(sourceName || '').trim() || this.defaultLocaleName(normalizedSourceCode);
+
+    uniqueLocales.set(normalizedSourceCode, { code: normalizedSourceCode, name: normalizedSourceName });
+
+    const rows = document.querySelectorAll(rowSelector);
+    for (const row of rows) {
+      const code = row.querySelector(codeSelector).value.trim();
+      const name = row.querySelector(nameSelector).value.trim();
+
+      if (!code && !name) continue;
+      if (!code || !name) {
+        this.toast('Each locale needs both a code and a display name', 'error');
+        return null;
+      }
+
+      if (uniqueLocales.has(code) && code !== normalizedSourceCode) {
+        this.toast(`Locale code "${code}" is duplicated`, 'error');
+        return null;
+      }
+
+      uniqueLocales.set(code, { code, name });
+    }
+
+    return Array.from(uniqueLocales.values());
+  },
+
   esc(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
     return div.innerHTML;
   },
 
-  render(html) {
-    document.getElementById('app').innerHTML = html;
-  },
-
   // ==================== Init ====================
-  init() {
-    this.showProjects();
+  async init() {
+    if (this.token) {
+      try {
+        const data = await this.fetch(`${API}/auth/me`);
+        this.user = data.user;
+        localStorage.setItem('th_user', JSON.stringify(data.user));
+        this.showDashboard();
+      } catch (e) {
+        this.logout();
+      }
+    } else {
+      this.showAuthScreen();
+    }
   }
 };
 
-// Start the app
 document.addEventListener('DOMContentLoaded', () => app.init());

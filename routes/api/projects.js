@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Project = require('../../models/Project');
 const TranslationKey = require('../../models/TranslationKey');
+const { requireAuth } = require('../../middleware/auth');
+
+// All dashboard project routes require authentication
+router.use(requireAuth);
 
 // GET /api/projects - List all projects
 router.get('/', async (req, res) => {
@@ -18,11 +22,12 @@ router.post('/', async (req, res) => {
   try {
     const { name, description, sourceLocale, locales } = req.body;
 
+    // locales is now an array of { code, name }
     const project = new Project({
       name,
       description,
       sourceLocale: sourceLocale || 'en',
-      locales: locales || [sourceLocale || 'en']
+      locales: locales || [{ code: sourceLocale || 'en', name: 'English' }]
     });
 
     await project.save();
@@ -80,7 +85,6 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Delete all translation keys for this project
     await TranslationKey.deleteMany({ projectId: project._id });
     await project.deleteOne();
 

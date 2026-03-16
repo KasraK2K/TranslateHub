@@ -9,13 +9,13 @@ const TranslationKey = require('../../models/TranslationKey');
  */
 
 // GET /api/v1/translations/:locale - Get all translations for a locale
-// Returns flat object: { "welcome.message": "Hello", "nav.home": "Home" }
 router.get('/translations/:locale', apiKeyAuth, async (req, res) => {
   try {
     const { locale } = req.params;
     const project = req.project;
+    const localeCodes = project.getLocaleCodes();
 
-    if (!project.locales.includes(locale)) {
+    if (!localeCodes.includes(locale)) {
       return res.status(404).json({ error: `Locale '${locale}' not found in project` });
     }
 
@@ -35,10 +35,10 @@ router.get('/translations/:locale', apiKeyAuth, async (req, res) => {
       }
     }
 
-    // Set cache headers (5 minutes)
     res.set('Cache-Control', 'public, max-age=300');
     res.json({
       locale,
+      localeName: project.getLocaleName(locale),
       projectId: project._id,
       translations
     });
@@ -55,11 +55,11 @@ router.get('/translations', apiKeyAuth, async (req, res) => {
 
     const result = {};
     for (const locale of project.locales) {
-      result[locale] = {};
+      result[locale.code] = {};
       for (const key of keys) {
-        const value = key.translations.get(locale);
+        const value = key.translations.get(locale.code);
         if (value) {
-          result[locale][key.key] = value;
+          result[locale.code][key.key] = value;
         }
       }
     }

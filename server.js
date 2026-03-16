@@ -19,6 +19,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API Routes
+app.use('/api/auth', require('./routes/api/auth'));
+app.use('/api/admins', require('./routes/api/admins'));
 app.use('/api/projects', require('./routes/api/projects'));
 app.use('/api/projects', require('./routes/api/translations'));
 app.use('/api/v1', require('./routes/api/public'));

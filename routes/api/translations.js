@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const TranslationKey = require('../../models/TranslationKey');
 const Project = require('../../models/Project');
+const { requireAuth } = require('../../middleware/auth');
+
+// All translation management routes require authentication
+router.use(requireAuth);
 
 // GET /api/projects/:projectId/keys - List all translation keys for a project
 router.get('/:projectId/keys', async (req, res) => {
