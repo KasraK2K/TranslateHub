@@ -3,12 +3,19 @@ const API = '/api';
 const app = {
   token: localStorage.getItem('th_token'),
   user: JSON.parse(localStorage.getItem('th_user') || 'null'),
-  currentPage: 'projects',
+  currentPage: localStorage.getItem('th_current_page') || 'projects',
   currentProject: null,
-  currentLocale: null,
+  currentProjectId: localStorage.getItem('th_current_project_id') || null,
+  currentLocale: localStorage.getItem('th_current_locale') || null,
+  currentTheme: localStorage.getItem('th_theme') || 'aurora',
   projects: [],
   keys: [],
   admins: [],
+  themes: [
+    { id: 'aurora', label: 'Aurora', icon: 'fa-sun' },
+    { id: 'ember', label: 'Ember', icon: 'fa-fire' },
+    { id: 'ocean', label: 'Ocean', icon: 'fa-water' }
+  ],
 
   defaultLocaleName(code) {
     const normalized = String(code || '').trim();
@@ -129,7 +136,60 @@ const app = {
     this.user = null;
     localStorage.removeItem('th_token');
     localStorage.removeItem('th_user');
+    this.currentProject = null;
     this.showAuthScreen();
+  },
+
+  // ==================== App State ====================
+  saveViewState() {
+    localStorage.setItem('th_current_page', this.currentPage || 'projects');
+
+    if (this.currentProjectId) {
+      localStorage.setItem('th_current_project_id', this.currentProjectId);
+    } else {
+      localStorage.removeItem('th_current_project_id');
+    }
+
+    if (this.currentLocale) {
+      localStorage.setItem('th_current_locale', this.currentLocale);
+    } else {
+      localStorage.removeItem('th_current_locale');
+    }
+  },
+
+  setTheme(themeId) {
+    const fallbackTheme = this.themes[0].id;
+    const selectedTheme = this.themes.find((theme) => theme.id === themeId) ? themeId : fallbackTheme;
+    this.currentTheme = selectedTheme;
+    localStorage.setItem('th_theme', selectedTheme);
+    document.documentElement.setAttribute('data-theme', selectedTheme);
+    this.renderThemeSwitcher();
+  },
+
+  renderThemeSwitcher() {
+    const container = document.getElementById('themeSwitcher');
+    if (!container) return;
+
+    container.innerHTML = this.themes.map((theme) => `
+      <button
+        class="theme-pill ${theme.id === this.currentTheme ? 'active' : ''}"
+        onclick="app.setTheme('${theme.id}')"
+        title="${theme.label} theme"
+        type="button"
+      >
+        <i class="fa-solid ${theme.icon}"></i>
+        <span>${theme.label}</span>
+      </button>
+    `).join('');
+  },
+
+  restoreLastView() {
+    if (this.currentProjectId && this.currentPage === 'projects') {
+      this.showProject(this.currentProjectId);
+      return;
+    }
+
+    this.navigate(this.currentPage || 'projects');
   },
 
   async showAuthScreen() {
@@ -278,8 +338,9 @@ const app = {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     document.getElementById('headerUser').textContent = this.user.displayName || this.user.username;
+    this.renderThemeSwitcher();
     this.renderSidebar();
-    this.navigate(this.currentPage);
+    this.restoreLastView();
   },
 
   renderSidebar() {
@@ -305,7 +366,9 @@ const app = {
   navigate(page) {
     this.currentPage = page;
     this.currentProject = null;
-    this.currentLocale = null;
+    this.currentProjectId = null;
+    if (page !== 'projects') this.currentLocale = null;
+    this.saveViewState();
     this.renderSidebar();
 
     switch (page) {
@@ -323,6 +386,8 @@ const app = {
   // ==================== Projects ====================
   async showProjects() {
     this.currentProject = null;
+    this.currentProjectId = null;
+    this.saveViewState();
     try {
       this.projects = await this.fetch(`${API}/projects`);
     } catch (e) { return; }
@@ -458,13 +523,24 @@ const app = {
     try {
       this.currentProject = await this.fetch(`${API}/projects/${projectId}`);
       this.keys = await this.fetch(`${API}/projects/${projectId}/keys`);
-    } catch (e) { return; }
+    } catch (e) {
+      this.currentProject = null;
+      this.currentProjectId = null;
+      this.currentLocale = null;
+      this.saveViewState();
+      this.showProjects();
+      return;
+    }
 
+    this.currentPage = 'projects';
+    this.currentProjectId = projectId;
     const codes = this.getLocaleCodes();
     // Only reset currentLocale if not set or not valid for this project
     if (!this.currentLocale || !codes.includes(this.currentLocale)) {
       this.currentLocale = codes.find(c => c !== this.currentProject.sourceLocale) || this.currentProject.sourceLocale;
     }
+    this.saveViewState();
+    this.renderSidebar();
     this.render(this.renderProjectDetail());
   },
 
@@ -595,6 +671,7 @@ const app = {
 
   changeLocale(locale) {
     this.currentLocale = locale;
+    this.saveViewState();
     this.render(this.renderProjectDetail());
   },
 
@@ -1261,6 +1338,8 @@ def t(key, locale="en"):
 
   // ==================== Init ====================
   async init() {
+    this.setTheme(this.currentTheme);
+
     if (this.token) {
       try {
         const data = await this.fetch(`${API}/auth/me`);
