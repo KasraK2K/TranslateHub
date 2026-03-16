@@ -12,6 +12,7 @@ const DEMO_PROJECT = {
   name: 'Demo App',
   description: 'A sample project to demonstrate TranslateHub',
   sourceLocale: 'en-US',
+  projectPassword: 'demo1234',
   locales: [
     { code: 'en-US', name: 'English (United States)' },
     { code: 'fr-FR', name: 'French (France)' },
@@ -147,6 +148,7 @@ async function seed() {
     // Create project
     const project = await Project.create(DEMO_PROJECT);
     console.log(`Created project: ${project.name} (API Key: ${project.apiKey})`);
+    console.log('Demo project password: demo1234');
 
     // Create translation keys
     for (const keyData of DEMO_KEYS) {

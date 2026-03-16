@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
 function toTitleCase(value) {
@@ -109,6 +110,16 @@ const projectSchema = new mongoose.Schema({
   locales: {
     type: [localeSchema],
     default: []
+  },
+  projectPassword: {
+    type: String,
+    required: [true, 'Project password is required'],
+    minlength: 6,
+    select: false
+  },
+  isLocked: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
@@ -128,6 +139,12 @@ projectSchema.pre('validate', function (next) {
   next();
 });
 
+projectSchema.pre('save', async function (next) {
+  if (!this.isModified('projectPassword')) return next();
+  this.projectPassword = await bcrypt.hash(this.projectPassword, 12);
+  next();
+});
+
 // Helper: get array of locale codes
 projectSchema.methods.getLocaleCodes = function () {
   return this.locales.map(l => l.code);
@@ -137,6 +154,16 @@ projectSchema.methods.getLocaleCodes = function () {
 projectSchema.methods.getLocaleName = function (code) {
   const locale = this.locales.find(l => l.code === code);
   return locale ? locale.name : code;
+};
+
+projectSchema.methods.compareProjectPassword = async function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.projectPassword);
+};
+
+projectSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.projectPassword;
+  return obj;
 };
 
 // Virtual: get translation progress

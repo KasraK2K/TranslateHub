@@ -7,6 +7,25 @@ const { requireAuth } = require('../../middleware/auth');
 // All translation management routes require authentication
 router.use(requireAuth);
 
+async function ensureProjectUnlocked(req, res, next) {
+  try {
+    const project = await Project.findById(req.params.projectId);
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.isLocked) {
+      return res.status(423).json({ error: 'Unlock this project before changing translation keys' });
+    }
+
+    req.project = project;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 // GET /api/projects/:projectId/keys - List all translation keys for a project
 router.get('/:projectId/keys', async (req, res) => {
   try {
@@ -35,7 +54,7 @@ router.get('/:projectId/keys', async (req, res) => {
 });
 
 // POST /api/projects/:projectId/keys - Create a new translation key
-router.post('/:projectId/keys', async (req, res) => {
+router.post('/:projectId/keys', ensureProjectUnlocked, async (req, res) => {
   try {
     const { key, description, translations } = req.body;
 
@@ -57,7 +76,7 @@ router.post('/:projectId/keys', async (req, res) => {
 });
 
 // POST /api/projects/:projectId/keys/bulk - Bulk create/update keys
-router.post('/:projectId/keys/bulk', async (req, res) => {
+router.post('/:projectId/keys/bulk', ensureProjectUnlocked, async (req, res) => {
   try {
     const { keys } = req.body; // Array of { key, description?, translations? }
 
@@ -105,7 +124,7 @@ router.post('/:projectId/keys/bulk', async (req, res) => {
 });
 
 // PUT /api/projects/:projectId/keys/:keyId - Update a translation key
-router.put('/:projectId/keys/:keyId', async (req, res) => {
+router.put('/:projectId/keys/:keyId', ensureProjectUnlocked, async (req, res) => {
   try {
     const translationKey = await TranslationKey.findOne({
       _id: req.params.keyId,
@@ -138,7 +157,7 @@ router.put('/:projectId/keys/:keyId', async (req, res) => {
 });
 
 // PATCH /api/projects/:projectId/keys/:keyId/translate - Update single locale translation
-router.patch('/:projectId/keys/:keyId/translate', async (req, res) => {
+router.patch('/:projectId/keys/:keyId/translate', ensureProjectUnlocked, async (req, res) => {
   try {
     const { locale, value } = req.body;
 
@@ -169,7 +188,7 @@ router.patch('/:projectId/keys/:keyId/translate', async (req, res) => {
 });
 
 // DELETE /api/projects/:projectId/keys/:keyId - Delete a translation key
-router.delete('/:projectId/keys/:keyId', async (req, res) => {
+router.delete('/:projectId/keys/:keyId', ensureProjectUnlocked, async (req, res) => {
   try {
     const result = await TranslationKey.findOneAndDelete({
       _id: req.params.keyId,

@@ -475,6 +475,7 @@ const app = {
           <div class="project-meta">
             <span><i class="fa-solid fa-language"></i> Source: <strong>${p.sourceLocale}</strong></span>
             <span><i class="fa-solid fa-earth-americas"></i> ${locales.length} locale${locales.length !== 1 ? 's' : ''}</span>
+            <span><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Unlocked'}</span>
           </div>
           <div class="locale-tags">
             ${locales.map((locale) => `<span class="locale-tag">${this.esc(locale.code)} - ${this.esc(locale.name)}</span>`).join('')}
@@ -528,6 +529,11 @@ const app = {
           </button>
           <div class="form-hint">Add each target language with a code and display name.</div>
         </div>
+        <div class="form-group">
+          <label>Project Password</label>
+          <input type="password" id="projectPassword" placeholder="Required for lock, unlock, and delete" autocomplete="new-password">
+          <div class="form-hint">Use at least 6 characters. You will need this password for lock, unlock, and delete actions.</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="app.closeModal()">Cancel</button>
@@ -559,11 +565,15 @@ const app = {
     const description = document.getElementById('projectDesc').value.trim();
     const sourceCode = document.getElementById('projectSourceCode').value.trim() || 'en';
     const sourceName = document.getElementById('projectSourceName').value.trim() || 'English';
+    const projectPassword = document.getElementById('projectPassword').value;
 
     const nameError = Helpers.validateRequired([
       { value: name, message: 'Project name is required' }
     ]);
     if (nameError) return this.toast(nameError, 'error');
+
+    const passwordError = Helpers.validateMinLength(projectPassword, 6, 'Project password must be at least 6 characters');
+    if (passwordError) return this.toast(passwordError, 'error');
 
     const locales = this.collectLocales('.locale-entry-row', '.locale-code-input', '.locale-name-input', {
       sourceCode,
@@ -575,7 +585,7 @@ const app = {
     try {
       const project = await this.fetch(`${API}/projects`, {
         method: 'POST',
-        body: JSON.stringify({ name, description, sourceLocale: sourceCode, locales })
+        body: JSON.stringify({ name, description, sourceLocale: sourceCode, locales, projectPassword })
       });
       this.closeModal();
       this.toast('Project created!', 'success');
@@ -619,6 +629,13 @@ const app = {
     const p = this.currentProject;
     const stats = p.stats || {};
     const locales = this.getProjectLocales(p);
+    const locked = !!p.isLocked;
+    const lockButton = locked
+      ? '<button class="btn btn-sm" onclick="app.showProjectPasswordModal(\'unlock\')"><i class="fa-solid fa-lock-open"></i> Unlock</button>'
+      : '<button class="btn btn-sm" onclick="app.showProjectPasswordModal(\'lock\')"><i class="fa-solid fa-lock"></i> Lock</button>';
+    const lockNotice = locked
+      ? '<div class="project-lock-banner"><i class="fa-solid fa-lock"></i><div><strong>Project locked</strong><p>Unlock it with the project password before editing keys or deleting the project.</p></div></div>'
+      : '<div class="project-lock-banner unlocked"><i class="fa-solid fa-lock-open"></i><div><strong>Project unlocked</strong><p>Keys can be edited now, but deleting the project still requires the project password.</p></div></div>';
 
     const statsHtml = Object.entries(stats).map(([code, s]) => `
       <div class="stat-card">
@@ -650,11 +667,14 @@ const app = {
           <p style="color:var(--gray-500);font-size:14px;margin-top:4px">${this.esc(p.description || '')}</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${lockButton}
           <button class="btn btn-sm" onclick="app.showApiKeyModal()"><i class="fa-solid fa-key"></i> API Key</button>
           <button class="btn btn-sm" onclick="app.showProjectSettingsModal()"><i class="fa-solid fa-gear"></i> Settings</button>
-          <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()"><i class="fa-solid fa-trash"></i> Delete</button>
+          <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-trash"></i> Delete</button>
         </div>
       </div>
+
+      ${lockNotice}
 
       <div class="card" style="margin-bottom:20px">
         <div class="card-header"><h2><i class="fa-solid fa-chart-bar"></i> Translation Progress</h2></div>
@@ -670,8 +690,8 @@ const app = {
             <select class="locale-selector" onchange="app.changeLocale(this.value)">${localeOptions}</select>
             <i class="fa-solid fa-chevron-down select-icon"></i>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="app.showAddKeyModal()"><i class="fa-solid fa-plus"></i> Add Key</button>
-          <button class="btn btn-sm" onclick="app.showBulkAddModal()"><i class="fa-solid fa-file-import"></i> Bulk Import</button>
+          <button class="btn btn-primary btn-sm" onclick="app.showAddKeyModal()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-plus"></i> Add Key</button>
+          <button class="btn btn-sm" onclick="app.showBulkAddModal()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-file-import"></i> Bulk Import</button>
         </div>
         <div id="keysTableContainer">
           ${this.keys.length === 0
@@ -692,6 +712,7 @@ const app = {
 
   renderKeyRow(k) {
     const p = this.currentProject;
+    const locked = !!p.isLocked;
     const getT = (translations, locale) => {
       if (!translations) return '';
       if (translations instanceof Map) return translations.get(locale) || '';
@@ -708,25 +729,31 @@ const app = {
           ${k.description ? `<div class="key-desc">${this.esc(k.description)}</div>` : ''}
         </td>
         <td>
-          <input class="translation-input ${!src ? 'empty' : ''}" value="${this.esc(src)}"
+          <input class="translation-input ${!src ? 'empty' : ''}" value="${this.esc(src)}" ${locked ? 'readonly' : ''}
             placeholder="Source text..." data-locale="${p.sourceLocale}" data-key-id="${k._id}"
             onchange="app.saveTranslation('${k._id}', '${p.sourceLocale}', this.value, this)">
         </td>
         <td>
           ${this.currentLocale !== p.sourceLocale ? `
-            <input class="translation-input ${!trans ? 'empty' : ''}" value="${this.esc(trans)}"
+            <input class="translation-input ${!trans ? 'empty' : ''}" value="${this.esc(trans)}" ${locked ? 'readonly' : ''}
               placeholder="Enter translation..." data-locale="${this.currentLocale}" data-key-id="${k._id}"
               onchange="app.saveTranslation('${k._id}', '${this.currentLocale}', this.value, this)">
           ` : '<span style="color:var(--gray-400);font-size:13px">Same as source</span>'}
         </td>
         <td class="actions-cell">
-          <button class="btn-icon" onclick="app.confirmDeleteKey('${k._id}', '${this.esc(k.key)}')" title="Delete key"><i class="fa-solid fa-trash"></i></button>
+          <button class="btn-icon" onclick="app.confirmDeleteKey('${k._id}', '${this.esc(k.key)}')" title="Delete key" ${locked ? 'disabled' : ''}><i class="fa-solid fa-trash"></i></button>
         </td>
       </tr>
     `;
   },
 
   async saveTranslation(keyId, locale, value, inputEl) {
+    if (this.currentProject.isLocked) {
+      this.toast('Unlock this project before editing translations', 'error');
+      if (inputEl) inputEl.blur();
+      return;
+    }
+
     try {
       await this.fetch(`${API}/projects/${this.currentProject._id}/keys/${keyId}/translate`, {
         method: 'PATCH',
@@ -756,6 +783,7 @@ const app = {
   },
 
   showAddKeyModal() {
+    if (this.currentProject.isLocked) return this.toast('Unlock this project before adding keys', 'error');
     const srcName = this.getLocaleName(this.currentProject.sourceLocale);
     this.openModal(`
       <div class="modal-header">
@@ -785,6 +813,7 @@ const app = {
   },
 
   async addKey() {
+    if (this.currentProject.isLocked) return this.toast('Unlock this project before adding keys', 'error');
     const key = document.getElementById('newKey').value.trim();
     const description = document.getElementById('newKeyDesc').value.trim();
     const value = document.getElementById('newKeyValue').value.trim();
@@ -805,6 +834,7 @@ const app = {
   },
 
   showBulkAddModal() {
+    if (this.currentProject.isLocked) return this.toast('Unlock this project before importing keys', 'error');
     const srcName = this.getLocaleName(this.currentProject.sourceLocale);
     this.openModal(`
       <div class="modal-header">
@@ -826,6 +856,7 @@ const app = {
   },
 
   async bulkImport() {
+    if (this.currentProject.isLocked) return this.toast('Unlock this project before importing keys', 'error');
     const raw = document.getElementById('bulkJson').value.trim();
     if (!raw) return this.toast('Paste JSON first', 'error');
     let data;
@@ -888,6 +919,44 @@ const app = {
     } catch (e) {}
   },
 
+  showProjectPasswordModal(action) {
+    const locked = action === 'lock';
+    this.openModal(`
+      <div class="modal-header">
+        <h3><i class="fa-solid ${locked ? 'fa-lock' : 'fa-lock-open'}"></i> ${locked ? 'Lock Project' : 'Unlock Project'}</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
+          Enter the project password to ${locked ? 'lock' : 'unlock'} <strong>${this.esc(this.currentProject.name)}</strong>.
+        </p>
+        <div class="form-group">
+          <label>Project Password</label>
+          <input type="password" id="projectActionPassword" placeholder="Enter project password" autofocus>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="app.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="app.submitProjectLockAction('${action}')">${locked ? 'Lock Project' : 'Unlock Project'}</button>
+      </div>
+    `);
+  },
+
+  async submitProjectLockAction(action) {
+    const password = document.getElementById('projectActionPassword').value;
+    if (!password) return this.toast('Project password is required', 'error');
+
+    try {
+      await this.fetch(`${API}/projects/${this.currentProject._id}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({ password })
+      });
+      this.closeModal();
+      this.toast(action === 'lock' ? 'Project locked' : 'Project unlocked', 'success');
+      this.showProject(this.currentProject._id, { skipRoute: true });
+    } catch (e) {}
+  },
+
   showProjectSettingsModal() {
     const p = this.currentProject;
     const localeRows = this.getProjectLocales(p).map((locale) => `
@@ -922,6 +991,11 @@ const app = {
             <i class="fa-solid fa-plus"></i> Add Locale
           </button>
         </div>
+        <div class="form-group">
+          <label>Change Project Password</label>
+          <input type="password" id="editProjectPassword" placeholder="Leave blank to keep current password" autocomplete="new-password">
+          <div class="form-hint">If set, this replaces the password used for lock, unlock, and delete.</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="app.closeModal()">Cancel</button>
@@ -948,10 +1022,16 @@ const app = {
   async updateProject() {
     const name = document.getElementById('editName').value.trim();
     const description = document.getElementById('editDesc').value.trim();
+    const projectPassword = document.getElementById('editProjectPassword').value;
     const nameError = Helpers.validateRequired([
       { value: name, message: 'Name is required' }
     ]);
     if (nameError) return this.toast(nameError, 'error');
+
+    if (projectPassword) {
+      const passwordError = Helpers.validateMinLength(projectPassword, 6, 'Project password must be at least 6 characters');
+      if (passwordError) return this.toast(passwordError, 'error');
+    }
 
     const locales = this.collectLocales('.locale-setting-row', '.setting-locale-code', '.setting-locale-name', {
       sourceCode: this.currentProject.sourceLocale,
@@ -962,7 +1042,7 @@ const app = {
 
     try {
       await this.fetch(`${API}/projects/${this.currentProject._id}`, {
-        method: 'PUT', body: JSON.stringify({ name, description, locales })
+        method: 'PUT', body: JSON.stringify({ name, description, locales, projectPassword })
       });
       this.closeModal();
       this.toast('Project updated!', 'success');
@@ -971,15 +1051,55 @@ const app = {
   },
 
   async confirmDeleteProject() {
-    if (!confirm(`Delete project "${this.currentProject.name}" and all its translations?`)) return;
+    if (this.currentProject.isLocked) {
+      this.toast('Unlock this project before deleting it', 'error');
+      return;
+    }
+
+    this.openModal(`
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> Delete Project</h3>
+        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
+          Enter the project password to continue deleting <strong>${this.esc(this.currentProject.name)}</strong>.
+        </p>
+        <div class="form-group">
+          <label>Project Password</label>
+          <input type="password" id="deleteProjectPassword" placeholder="Enter project password" autofocus>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="app.closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="app.submitDeleteProjectPassword()"><i class="fa-solid fa-trash"></i> Continue</button>
+      </div>
+    `);
+  },
+
+  async submitDeleteProjectPassword() {
+    const password = document.getElementById('deleteProjectPassword').value;
+    if (!password) return this.toast('Project password is required', 'error');
+    if (!confirm(`Are you sure you want to permanently delete "${this.currentProject.name}"?`)) return;
+
     try {
-      await this.fetch(`${API}/projects/${this.currentProject._id}`, { method: 'DELETE' });
+      await this.fetch(`${API}/projects/${this.currentProject._id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ password, confirm: true })
+      });
+      this.closeModal();
       this.toast('Project deleted', 'success');
-      this.navigate('projects');
+      this.navigate('projects', { skipRoute: true });
+      this.updateRoute({ page: 'projects' }, true);
+      this.showProjects();
     } catch (e) {}
   },
 
   async confirmDeleteKey(keyId, keyName) {
+    if (this.currentProject.isLocked) {
+      this.toast('Unlock this project before deleting keys', 'error');
+      return;
+    }
     if (!confirm(`Delete key "${keyName}"?`)) return;
     try {
       await this.fetch(`${API}/projects/${this.currentProject._id}/keys/${keyId}`, { method: 'DELETE' });
