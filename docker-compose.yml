@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: translate-hub-app
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: change-this-in-production
+      MONGODB_URI: mongodb://mongo:27017/translate-hub
+    ports:
+      - "3000:3000"
+    networks:
+      - translate-hub
+
+  mongo:
+    image: mongo:7
+    container_name: translate-hub-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - translate-hub
+
+volumes:
+  mongo-data:
+
+networks:
+  translate-hub:
+    driver: bridge
