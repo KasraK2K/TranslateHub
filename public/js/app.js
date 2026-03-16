@@ -452,15 +452,6 @@ const app = {
     `).join('');
 
     document.getElementById('sidebar').innerHTML = `
-      <div class="sidebar-top">
-        <div class="sidebar-brand">
-          <div class="sidebar-brand-icon"><i class="fa-solid fa-globe"></i></div>
-          <div>
-            <strong>TranslateHub</strong>
-            <p>Manage live translations</p>
-          </div>
-        </div>
-      </div>
       <div class="sidebar-section">
         <div class="sidebar-section-label">Menu</div>
         <div class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" onclick="app.navigate('projects')">
