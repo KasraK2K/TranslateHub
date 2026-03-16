@@ -1,4 +1,7 @@
 const API = '/api';
+const Helpers = window.TranslateHubHelpers;
+const Router = window.TranslateHubRouter;
+const UI = window.TranslateHubUI;
 
 const app = {
   token: localStorage.getItem('th_token'),
@@ -18,53 +21,15 @@ const app = {
   ],
 
   defaultLocaleName(code) {
-    const normalized = String(code || '').trim();
-    if (!normalized) return 'Unknown';
-
-    try {
-      if (normalized.includes('-')) {
-        const [language, ...rest] = normalized.split('-');
-        const suffix = rest.join('-');
-        const languageName = new Intl.DisplayNames(['en'], { type: 'language' }).of(language.toLowerCase());
-        const suffixName = suffix
-          ? new Intl.DisplayNames(['en'], { type: suffix.length === 4 ? 'script' : 'region' }).of(
-              suffix.length === 4 ? suffix : suffix.toUpperCase()
-            )
-          : '';
-
-        if (languageName && suffixName) return `${languageName} (${suffixName})`;
-      }
-
-      const languageName = new Intl.DisplayNames(['en'], { type: 'language' }).of(normalized.toLowerCase());
-      if (languageName) return languageName;
-    } catch (error) {
-      // Ignore Intl lookup failures and use a readable fallback.
-    }
-
-    return normalized
-      .replace(/[-_]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
+    return Helpers.defaultLocaleName(code);
   },
 
   normalizeLocale(locale) {
-    if (typeof locale === 'string') {
-      const code = locale.trim();
-      return { code, name: this.defaultLocaleName(code) };
-    }
-
-    const code = String(locale && locale.code || '').trim();
-    return {
-      code,
-      name: String(locale && locale.name || '').trim() || this.defaultLocaleName(code)
-    };
+    return Helpers.normalizeLocale(locale);
   },
 
   getProjectLocales(project) {
-    return ((project || this.currentProject || {}).locales || [])
-      .map((locale) => this.normalizeLocale(locale))
-      .filter((locale) => locale.code);
+    return Helpers.getProjectLocales(project || this.currentProject || {});
   },
 
   // ==================== API Helpers ====================
@@ -98,8 +63,7 @@ const app = {
 
   // Get locale name by code
   getLocaleName(code, project) {
-    const locale = this.getProjectLocales(project).find((entry) => entry.code === code);
-    return locale ? locale.name : this.defaultLocaleName(code);
+    return Helpers.getLocaleName(code, project || this.currentProject || {});
   },
 
   // ==================== Toast ====================
@@ -166,6 +130,56 @@ const app = {
     this.renderThemeSwitcher();
   },
 
+  toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('mobileSidebarBackdrop');
+    if (!sidebar || !backdrop) return;
+    sidebar.classList.toggle('mobile-open');
+    backdrop.classList.toggle('active');
+  },
+
+  closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('mobileSidebarBackdrop');
+    if (!sidebar || !backdrop) return;
+    sidebar.classList.remove('mobile-open');
+    backdrop.classList.remove('active');
+  },
+
+  updateRoute(route, replace) {
+    const nextHash = Router.buildHash(route);
+    if (window.location.hash === nextHash) return false;
+
+    if (replace) {
+      history.replaceState(null, '', nextHash);
+    } else {
+      window.location.hash = nextHash;
+    }
+
+    return true;
+  },
+
+  handleRouteChange() {
+    if (!this.token) return;
+
+    const route = Router.parseHash(window.location.hash);
+    switch (route.page) {
+      case 'admins':
+        this.navigate('admins', { skipRoute: true });
+        break;
+      case 'docs':
+        this.navigate('docs', { skipRoute: true });
+        break;
+      case 'project':
+        if (route.locale) this.currentLocale = route.locale;
+        this.showProject(route.projectId, { skipRoute: true });
+        break;
+      default:
+        this.navigate('projects', { skipRoute: true });
+        break;
+    }
+  },
+
   renderThemeSwitcher() {
     const container = document.getElementById('themeSwitcher');
     if (!container) return;
@@ -184,12 +198,18 @@ const app = {
   },
 
   restoreLastView() {
-    if (this.currentProjectId && this.currentPage === 'projects') {
-      this.showProject(this.currentProjectId);
+    if (window.location.hash) {
+      this.handleRouteChange();
       return;
     }
 
-    this.navigate(this.currentPage || 'projects');
+    if (this.currentProjectId && this.currentPage === 'projects') {
+      this.updateRoute({ page: 'project', projectId: this.currentProjectId, locale: this.currentLocale }, true);
+    } else {
+      this.updateRoute({ page: this.currentPage || 'projects' }, true);
+    }
+
+    this.handleRouteChange();
   },
 
   async showAuthScreen() {
@@ -268,8 +288,13 @@ const app = {
     const password = document.getElementById('loginPassword').value;
     const errEl = document.getElementById('authError');
 
-    if (!username || !password) {
-      errEl.textContent = 'Please enter username and password';
+    const validationError = Helpers.validateRequired([
+      { value: username, message: 'Please enter username and password' },
+      { value: password, message: 'Please enter username and password' }
+    ]);
+
+    if (validationError) {
+      errEl.textContent = validationError;
       errEl.classList.add('visible');
       return;
     }
@@ -300,14 +325,20 @@ const app = {
     const password = document.getElementById('setupPassword').value;
     const errEl = document.getElementById('authError');
 
-    if (!username || !password) {
-      errEl.textContent = 'Username and password are required';
+    const requiredError = Helpers.validateRequired([
+      { value: username, message: 'Username and password are required' },
+      { value: password, message: 'Username and password are required' }
+    ]);
+
+    if (requiredError) {
+      errEl.textContent = requiredError;
       errEl.classList.add('visible');
       return;
     }
 
-    if (password.length < 6) {
-      errEl.textContent = 'Password must be at least 6 characters';
+    const passwordError = Helpers.validateMinLength(password, 6, 'Password must be at least 6 characters');
+    if (passwordError) {
+      errEl.textContent = passwordError;
       errEl.classList.add('visible');
       return;
     }
@@ -346,11 +377,25 @@ const app = {
   renderSidebar() {
     const isSuperAdmin = this.user.role === 'super_admin';
     document.getElementById('sidebar').innerHTML = `
+      <div class="sidebar-top">
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon"><i class="fa-solid fa-globe"></i></div>
+          <div>
+            <strong>TranslateHub</strong>
+            <p>Manage live translations</p>
+          </div>
+        </div>
+      </div>
       <div class="sidebar-section">
         <div class="sidebar-section-label">Menu</div>
-        <div class="sidebar-item ${this.currentPage === 'projects' ? 'active' : ''}" onclick="app.navigate('projects')">
+        <div class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" onclick="app.navigate('projects')">
           <i class="fa-solid fa-folder icon"></i> Projects
         </div>
+        ${this.currentProjectId && this.currentProject ? `
+        <div class="sidebar-item ${this.currentPage === 'projects' && this.currentProjectId ? 'active' : ''}" onclick="app.showProject('${this.currentProjectId}')">
+          <i class="fa-solid fa-language icon"></i> ${this.esc(this.currentProject.name)}
+        </div>
+        ` : ''}
         ${isSuperAdmin ? `
         <div class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" onclick="app.navigate('admins')">
           <i class="fa-solid fa-users icon"></i> Admins
@@ -363,13 +408,16 @@ const app = {
     `;
   },
 
-  navigate(page) {
+  navigate(page, options = {}) {
+    if (!options.skipRoute && this.updateRoute({ page })) return;
+
     this.currentPage = page;
     this.currentProject = null;
     this.currentProjectId = null;
     if (page !== 'projects') this.currentLocale = null;
     this.saveViewState();
     this.renderSidebar();
+    this.closeSidebar();
 
     switch (page) {
       case 'projects': this.showProjects(); break;
@@ -385,25 +433,37 @@ const app = {
 
   // ==================== Projects ====================
   async showProjects() {
+    this.currentPage = 'projects';
     this.currentProject = null;
     this.currentProjectId = null;
     this.saveViewState();
+    this.render(UI.renderLoadingState('Loading projects'));
     try {
       this.projects = await this.fetch(`${API}/projects`);
-    } catch (e) { return; }
+    } catch (e) {
+      this.render(UI.renderErrorState({
+        title: 'Could not load projects',
+        message: e.message,
+        action: '<button class="btn btn-primary" onclick="app.showProjects()">Try Again</button>'
+      }));
+      return;
+    }
     this.render(this.renderProjectsList());
   },
 
   renderProjectsList() {
     if (this.projects.length === 0) {
-      return `
-        <div class="empty-state">
-          <div class="empty-icon"><i class="fa-solid fa-language"></i></div>
-          <h3>No projects yet</h3>
-          <p>Create your first translation project to get started.</p>
-          <button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>
-        </div>
-      `;
+      return `${UI.renderPageHero({
+        eyebrow: 'Workspace',
+        title: 'Projects',
+        description: 'Create and manage localized apps from one place.',
+        actions: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
+      })}
+      <div class="card">${UI.renderErrorState({
+        title: 'No projects yet',
+        message: 'Create your first translation project to get started.',
+        action: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
+      })}</div>`;
     }
 
     const cards = this.projects.map(p => {
@@ -424,11 +484,13 @@ const app = {
     }).join('');
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="font-size:24px;font-weight:700">Projects</h1>
-        <button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>
-      </div>
-      <div class="project-grid">${cards}</div>
+      ${UI.renderPageHero({
+        eyebrow: 'Workspace',
+        title: 'Projects',
+        description: 'Jump back into any app, keep locale work organized, and ship copy changes faster.',
+        actions: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
+      })}
+      <div class="project-grid wide-grid">${cards}</div>
     `;
   },
 
@@ -498,7 +560,10 @@ const app = {
     const sourceCode = document.getElementById('projectSourceCode').value.trim() || 'en';
     const sourceName = document.getElementById('projectSourceName').value.trim() || 'English';
 
-    if (!name) return this.toast('Project name is required', 'error');
+    const nameError = Helpers.validateRequired([
+      { value: name, message: 'Project name is required' }
+    ]);
+    if (nameError) return this.toast(nameError, 'error');
 
     const locales = this.collectLocales('.locale-entry-row', '.locale-code-input', '.locale-name-input', {
       sourceCode,
@@ -519,7 +584,11 @@ const app = {
   },
 
   // ==================== Project Detail ====================
-  async showProject(projectId) {
+  async showProject(projectId, options = {}) {
+    if (!options.skipRoute && this.updateRoute({ page: 'project', projectId, locale: this.currentLocale })) return;
+
+    this.render(UI.renderLoadingState('Loading project details'));
+
     try {
       this.currentProject = await this.fetch(`${API}/projects/${projectId}`);
       this.keys = await this.fetch(`${API}/projects/${projectId}/keys`);
@@ -540,7 +609,9 @@ const app = {
       this.currentLocale = codes.find(c => c !== this.currentProject.sourceLocale) || this.currentProject.sourceLocale;
     }
     this.saveViewState();
+    this.updateRoute({ page: 'project', projectId, locale: this.currentLocale }, true);
     this.renderSidebar();
+    this.closeSidebar();
     this.render(this.renderProjectDetail());
   },
 
@@ -672,6 +743,7 @@ const app = {
   changeLocale(locale) {
     this.currentLocale = locale;
     this.saveViewState();
+    this.updateRoute({ page: 'project', projectId: this.currentProject._id, locale }, true);
     this.render(this.renderProjectDetail());
   },
 
@@ -876,7 +948,10 @@ const app = {
   async updateProject() {
     const name = document.getElementById('editName').value.trim();
     const description = document.getElementById('editDesc').value.trim();
-    if (!name) return this.toast('Name is required', 'error');
+    const nameError = Helpers.validateRequired([
+      { value: name, message: 'Name is required' }
+    ]);
+    if (nameError) return this.toast(nameError, 'error');
 
     const locales = this.collectLocales('.locale-setting-row', '.setting-locale-code', '.setting-locale-name', {
       sourceCode: this.currentProject.sourceLocale,
@@ -915,12 +990,24 @@ const app = {
 
   // ==================== Admins ====================
   async showAdmins() {
+    this.currentPage = 'admins';
     if (this.user.role !== 'super_admin') {
-      return this.render('<div class="empty-state"><h3>Access Denied</h3><p>Only super admins can manage users.</p></div>');
+      return this.render(UI.renderErrorState({
+        title: 'Access denied',
+        message: 'Only super admins can manage users.'
+      }));
     }
+    this.render(UI.renderLoadingState('Loading admin users'));
     try {
       this.admins = await this.fetch(`${API}/admins`);
-    } catch (e) { return; }
+    } catch (e) {
+      this.render(UI.renderErrorState({
+        title: 'Could not load admins',
+        message: e.message,
+        action: '<button class="btn btn-primary" onclick="app.showAdmins()">Try Again</button>'
+      }));
+      return;
+    }
     this.render(this.renderAdminsPage());
   },
 
@@ -939,10 +1026,12 @@ const app = {
     `).join('');
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="font-size:24px;font-weight:700">Admin Users</h1>
-        <button class="btn btn-primary" onclick="app.showCreateAdminModal()"><i class="fa-solid fa-user-plus"></i> New Admin</button>
-      </div>
+      ${UI.renderPageHero({
+        eyebrow: 'Access Control',
+        title: 'Admin Users',
+        description: 'Manage who can access the dashboard and what level of control they have.',
+        actions: '<button class="btn btn-primary" onclick="app.showCreateAdminModal()"><i class="fa-solid fa-user-plus"></i> New Admin</button>'
+      })}
       <div class="card">
         <table class="admin-table">
           <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
@@ -992,8 +1081,14 @@ const app = {
     const password = document.getElementById('adminPassword').value;
     const role = document.getElementById('adminRole').value;
 
-    if (!username || !password) return this.toast('Username and password required', 'error');
-    if (password.length < 6) return this.toast('Password must be at least 6 characters', 'error');
+    const requiredError = Helpers.validateRequired([
+      { value: username, message: 'Username and password required' },
+      { value: password, message: 'Username and password required' }
+    ]);
+    if (requiredError) return this.toast(requiredError, 'error');
+
+    const passwordError = Helpers.validateMinLength(password, 6, 'Password must be at least 6 characters');
+    if (passwordError) return this.toast(passwordError, 'error');
 
     try {
       await this.fetch(`${API}/admins`, {
@@ -1074,8 +1169,14 @@ const app = {
 
   // ==================== Documentation ====================
   showDocs() {
+    this.currentPage = 'docs';
     this.render(`
-      <div class="docs-content">
+      ${UI.renderPageHero({
+        eyebrow: 'Reference',
+        title: 'Documentation',
+        description: 'Everything you need to configure, use, and integrate TranslateHub.'
+      })}
+      <div class="docs-content docs-wide">
         <h1><i class="fa-solid fa-book"></i> TranslateHub Documentation</h1>
         <p>TranslateHub is a translation management platform that lets you manage your application's translations externally. Your client apps fetch translations at runtime via a REST API, so you never need to redeploy to update text.</p>
 
@@ -1302,43 +1403,28 @@ def t(key, locale="en"):
 
   // ==================== Helpers ====================
   collectLocales(rowSelector, codeSelector, nameSelector, { sourceCode, sourceName }) {
-    const uniqueLocales = new Map();
-    const normalizedSourceCode = String(sourceCode || 'en').trim() || 'en';
-    const normalizedSourceName = String(sourceName || '').trim() || this.defaultLocaleName(normalizedSourceCode);
+    const entries = Array.from(document.querySelectorAll(rowSelector)).map((row) => ({
+      code: row.querySelector(codeSelector).value.trim(),
+      name: row.querySelector(nameSelector).value.trim()
+    }));
+    const result = Helpers.collectLocaleEntries(entries, { sourceCode, sourceName });
 
-    uniqueLocales.set(normalizedSourceCode, { code: normalizedSourceCode, name: normalizedSourceName });
-
-    const rows = document.querySelectorAll(rowSelector);
-    for (const row of rows) {
-      const code = row.querySelector(codeSelector).value.trim();
-      const name = row.querySelector(nameSelector).value.trim();
-
-      if (!code && !name) continue;
-      if (!code || !name) {
-        this.toast('Each locale needs both a code and a display name', 'error');
-        return null;
-      }
-
-      if (uniqueLocales.has(code) && code !== normalizedSourceCode) {
-        this.toast(`Locale code "${code}" is duplicated`, 'error');
-        return null;
-      }
-
-      uniqueLocales.set(code, { code, name });
+    if (result.error) {
+      this.toast(result.error, 'error');
+      return null;
     }
 
-    return Array.from(uniqueLocales.values());
+    return result.locales;
   },
 
   esc(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    return Helpers.escapeHtml(str);
   },
 
   // ==================== Init ====================
   async init() {
     this.setTheme(this.currentTheme);
+    window.addEventListener('hashchange', () => this.handleRouteChange());
 
     if (this.token) {
       try {
