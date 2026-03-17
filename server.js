@@ -17,8 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/vendor/preact', express.static(path.join(__dirname, 'node_modules', 'preact', 'dist')));
-app.use('/vendor/htm', express.static(path.join(__dirname, 'node_modules', 'htm', 'dist')));
+app.use('/vendor/preact', express.static(path.join(__dirname, 'node_modules', 'preact')));
+app.use('/vendor/htm', express.static(path.join(__dirname, 'node_modules', 'htm')));
 
 // API Routes
 app.use('/api/auth', require('./routes/api/auth'));

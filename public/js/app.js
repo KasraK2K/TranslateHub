@@ -108,6 +108,13 @@ const app = {
   },
 
   // ==================== Auth ====================
+  setAuthError(message) {
+    const errorEl = document.getElementById('authError');
+    if (!errorEl) return;
+    errorEl.textContent = message || '';
+    errorEl.classList.toggle('visible', !!message);
+  },
+
   setAuth(token, user) {
     this.token = token;
     this.user = user;
@@ -327,87 +334,35 @@ const app = {
 
     try {
       const status = await fetch(`${API}/auth/status`).then(r => r.json());
-      if (status.needsSetup) {
-        this.renderSetupPage();
-      } else {
-        this.renderLoginPage();
-      }
+      document.getElementById('authScreen').innerHTML = '';
+      window.TranslateHubPreact.renderAuthScreen(document.getElementById('authScreen'), {
+        needsSetup: !!status.needsSetup,
+        errorMessage: ''
+      });
     } catch (e) {
-      this.renderLoginPage();
+      document.getElementById('authScreen').innerHTML = '';
+      window.TranslateHubPreact.renderAuthScreen(document.getElementById('authScreen'), {
+        needsSetup: false,
+        errorMessage: ''
+      });
     }
-  },
-
-  renderLoginPage() {
-    document.getElementById('authScreen').innerHTML = `
-      <div class="auth-wrapper">
-        <div class="auth-card">
-          <div class="auth-logo">
-            <div class="icon"><img src="/logo/logo.png" alt="TranslateHub" class="brand-logo brand-logo-auth"></div>
-            <p>Sign in to manage your translations</p>
-          </div>
-          <div class="auth-error" id="authError"></div>
-          <div class="form-group">
-            <label>Username</label>
-            <input type="text" id="loginUsername" placeholder="Enter your username" autofocus
-              onkeydown="if(event.key==='Enter')app.doLogin()">
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="loginPassword" placeholder="Enter your password"
-              onkeydown="if(event.key==='Enter')app.doLogin()">
-          </div>
-          <button class="btn-auth" onclick="app.doLogin()"><i class="fa-solid fa-right-to-bracket"></i> Sign In</button>
-        </div>
-      </div>
-    `;
-  },
-
-  renderSetupPage() {
-    document.getElementById('authScreen').innerHTML = `
-      <div class="auth-wrapper">
-        <div class="auth-card">
-          <div class="auth-logo">
-            <div class="icon"><img src="/logo/logo.png" alt="TranslateHub" class="brand-logo brand-logo-auth"></div>
-            <p>Create your super admin account to get started</p>
-          </div>
-          <div class="auth-error" id="authError"></div>
-          <div class="form-group">
-            <label>Display Name</label>
-            <input type="text" id="setupDisplayName" placeholder="Your name" autofocus>
-          </div>
-          <div class="form-group">
-            <label>Username</label>
-            <input type="text" id="setupUsername" placeholder="Choose a username">
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="setupPassword" placeholder="Choose a password (min 6 chars)"
-              onkeydown="if(event.key==='Enter')app.doSetup()">
-          </div>
-          <button class="btn-auth" onclick="app.doSetup()"><i class="fa-solid fa-user-shield"></i> Create Super Admin</button>
-        </div>
-      </div>
-    `;
   },
 
   async doLogin() {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const errEl = document.getElementById('authError');
-
     const validationError = Helpers.validateRequired([
       { value: username, message: 'Please enter username and password' },
       { value: password, message: 'Please enter username and password' }
     ]);
 
     if (validationError) {
-      errEl.textContent = validationError;
-      errEl.classList.add('visible');
+      this.setAuthError(validationError);
       return;
     }
 
     try {
-      errEl.classList.remove('visible');
+      this.setAuthError('');
       const data = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,8 +376,7 @@ const app = {
       this.setAuth(data.token, data.user);
       this.showDashboard();
     } catch (error) {
-      errEl.textContent = error.message;
-      errEl.classList.add('visible');
+      this.setAuthError(error.message);
     }
   },
 
@@ -430,28 +384,24 @@ const app = {
     const displayName = document.getElementById('setupDisplayName').value.trim();
     const username = document.getElementById('setupUsername').value.trim();
     const password = document.getElementById('setupPassword').value;
-    const errEl = document.getElementById('authError');
-
     const requiredError = Helpers.validateRequired([
       { value: username, message: 'Username and password are required' },
       { value: password, message: 'Username and password are required' }
     ]);
 
     if (requiredError) {
-      errEl.textContent = requiredError;
-      errEl.classList.add('visible');
+      this.setAuthError(requiredError);
       return;
     }
 
     const passwordError = Helpers.validateMinLength(password, 6, 'Password must be at least 6 characters');
     if (passwordError) {
-      errEl.textContent = passwordError;
-      errEl.classList.add('visible');
+      this.setAuthError(passwordError);
       return;
     }
 
     try {
-      errEl.classList.remove('visible');
+      this.setAuthError('');
       const data = await fetch(`${API}/auth/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -466,8 +416,7 @@ const app = {
       this.toast('Super admin created! Welcome to TranslateHub.', 'success');
       this.showDashboard();
     } catch (error) {
-      errEl.textContent = error.message;
-      errEl.classList.add('visible');
+      this.setAuthError(error.message);
     }
   },
 
@@ -557,6 +506,13 @@ const app = {
     document.getElementById('app').innerHTML = html;
   },
 
+  renderIntoApp(renderer, props) {
+    if (!window.TranslateHubPreact || !renderer) return;
+    const container = document.getElementById('app');
+    container.innerHTML = '';
+    renderer(container, props);
+  },
+
   // ==================== Projects ====================
   async showProjects() {
     this.currentPage = 'projects';
@@ -575,61 +531,11 @@ const app = {
       return;
     }
     this.renderSidebar();
-    this.render(this.renderProjectsList());
+    this.renderProjectsList();
   },
 
   renderProjectsList() {
-    if (this.projects.length === 0) {
-      return `${UI.renderPageHero({
-        eyebrow: 'Workspace',
-        title: 'Projects',
-        description: 'Create and manage localized apps from one place.',
-        actions: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
-      })}
-      <div class="card">${UI.renderErrorState({
-        title: 'No projects yet',
-        message: 'Create your first translation project to get started.',
-        action: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
-      })}</div>`;
-    }
-
-    const cards = this.projects.map(p => {
-      const locales = this.getProjectLocales(p);
-      const translated = p.stats ? Object.values(p.stats).reduce((sum, item) => sum + (item.translated || 0), 0) : 0;
-      const total = p.stats ? Object.values(p.stats).reduce((sum, item) => sum + (item.total || 0), 0) : 0;
-      const completion = total ? Math.round((translated / total) * 100) : 0;
-      return `
-        <button class="project-card" type="button" onclick="app.showProject('${p._id}')">
-          <div class="project-card-topline">
-            <span class="project-status ${p.isLocked ? 'locked' : 'unlocked'}"><i class="fa-solid ${p.isLocked ? 'fa-lock' : 'fa-lock-open'}"></i> ${p.isLocked ? 'Locked' : 'Live'}</span>
-            <span class="project-score">${completion}% ready</span>
-          </div>
-          <h3>${this.esc(p.name)}</h3>
-          <div class="project-desc">${this.esc(p.description || 'No description')}</div>
-          <div class="project-meta">
-            <span><i class="fa-solid fa-language"></i> Source: <strong>${p.sourceLocale}</strong></span>
-            <span><i class="fa-solid fa-earth-americas"></i> ${locales.length} locale${locales.length !== 1 ? 's' : ''}</span>
-            <span><i class="fa-solid fa-file-lines"></i> ${(p.stats && Object.values(p.stats)[0] && Object.values(p.stats)[0].total) || 0} keys</span>
-          </div>
-          <div class="project-card-progress">
-            <div class="project-card-progress-bar"><span style="width:${completion}%"></span></div>
-          </div>
-          <div class="locale-tags">
-            ${locales.map((locale) => `<span class="locale-tag">${this.esc(locale.code)} - ${this.esc(locale.name)}</span>`).join('')}
-          </div>
-        </button>
-      `;
-    }).join('');
-
-    return `
-      ${UI.renderPageHero({
-        eyebrow: 'Workspace',
-        title: 'Projects',
-        description: 'Jump back into any app, keep locale work organized, and ship copy changes faster.',
-        actions: '<button class="btn btn-primary" onclick="app.showCreateProjectModal()"><i class="fa-solid fa-plus"></i> New Project</button>'
-      })}
-      <div class="project-grid wide-grid">${cards}</div>
-    `;
+    this.renderIntoApp(window.TranslateHubPreact.renderProjectsPage, { projects: this.projects });
   },
 
   showCreateProjectModal() {
@@ -761,108 +667,15 @@ const app = {
     this.updateRoute({ page: 'project', projectId, locale: this.currentLocale }, true);
     this.renderSidebar();
     this.closeSidebar();
-    this.render(this.renderProjectDetail());
+    this.renderProjectDetail();
   },
 
   renderProjectDetail() {
-    const p = this.currentProject;
-    const stats = p.stats || {};
-    const locales = this.getProjectLocales(p);
-    const locked = !!p.isLocked;
-    const lockButton = locked
-      ? '<button class="btn btn-sm" onclick="app.showProjectPasswordModal(\'unlock\')"><i class="fa-solid fa-lock-open"></i> Unlock</button>'
-      : '<button class="btn btn-sm" onclick="app.showProjectPasswordModal(\'lock\')"><i class="fa-solid fa-lock"></i> Lock</button>';
-    const lockNotice = locked
-      ? '<div class="project-lock-banner"><i class="fa-solid fa-lock"></i><div><strong>Project locked</strong><p>Unlock it with the project password before editing keys or deleting the project.</p></div></div>'
-      : '<div class="project-lock-banner unlocked"><i class="fa-solid fa-lock-open"></i><div><strong>Project unlocked</strong><p>Keys can be edited now, but deleting the project still requires the project password.</p></div></div>';
-
-    const statsHtml = Object.entries(stats).map(([code, s]) => `
-      <div class="stat-card">
-        <div class="stat-ring" style="--ring:${s.percentage}%">
-          <span>${s.percentage}%</span>
-        </div>
-        <div class="stat-locale">${this.esc(s.name || code)} ${code === p.sourceLocale ? '(source)' : ''}</div>
-        <div class="stat-count">${s.translated}/${s.total} (${s.percentage}%)</div>
-        <div class="progress-bar">
-          <div class="progress-fill ${s.percentage === 100 ? 'complete' : ''}" style="width:${s.percentage}%"></div>
-        </div>
-      </div>
-    `).join('');
-
-    const totalKeys = Object.values(stats)[0] ? Object.values(stats)[0].total : 0;
-    const activeLocaleStats = stats[this.currentLocale] || { percentage: 0, translated: 0, total: 0 };
-
-    const localeOptions = locales.map((locale) =>
-      `<option value="${this.esc(locale.code)}" ${locale.code === this.currentLocale ? 'selected' : ''}>${this.esc(locale.name)} (${this.esc(locale.code)})${locale.code === p.sourceLocale ? ' - source' : ''}</option>`
-    ).join('');
-
-    const rows = this.keys.map(k => this.renderKeyRow(k)).join('');
-    const curLocaleName = this.getLocaleName(this.currentLocale);
-
-    return `
-      <div class="breadcrumb">
-        <button type="button" class="breadcrumb-link" onclick="app.navigate('projects')">Projects</button>
-        <span>/</span>
-        <span>${this.esc(p.name)}</span>
-      </div>
-
-      <div class="project-shell">
-        <div class="project-shell-head">
-          <div>
-            <div class="project-shell-kicker">Translation workspace</div>
-            <h1 class="project-shell-title">${this.esc(p.name)}</h1>
-            <p class="project-shell-desc">${this.esc(p.description || 'A central place to manage source copy, translations, and release readiness.')}</p>
-          </div>
-          <div class="project-shell-actions">
-            <div class="project-pill-grid">
-              <div class="project-pill"><i class="fa-solid fa-earth-americas"></i><span>${locales.length} locales</span></div>
-              <div class="project-pill"><i class="fa-solid fa-file-lines"></i><span>${totalKeys} keys</span></div>
-              <div class="project-pill"><i class="fa-solid fa-chart-line"></i><span>${activeLocaleStats.percentage}% in ${this.esc(curLocaleName)}</span></div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${lockButton}
-          <button class="btn btn-sm" onclick="app.showApiKeyModal()"><i class="fa-solid fa-key"></i> API Key</button>
-          <button class="btn btn-sm" onclick="app.showProjectSettingsModal()"><i class="fa-solid fa-gear"></i> Settings</button>
-          <button class="btn btn-sm btn-danger" onclick="app.confirmDeleteProject()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-trash"></i> Delete</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      ${lockNotice}
-
-      <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2><i class="fa-solid fa-chart-bar"></i> Translation Progress</h2></div>
-        <div class="card-body">
-          <div class="stats-grid">${statsHtml || '<p style="color:var(--gray-500)">Add some translation keys to see progress.</p>'}</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="translation-toolbar">
-          <input type="text" class="search-input" placeholder="Search keys..." oninput="app.filterKeys(this.value)">
-          <div class="select-wrap locale-selector-wrap">
-            <select class="locale-selector" onchange="app.changeLocale(this.value)">${localeOptions}</select>
-            <i class="fa-solid fa-chevron-down select-icon"></i>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="app.showAddKeyModal()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-plus"></i> Add Key</button>
-          <button class="btn btn-sm" onclick="app.showBulkAddModal()" ${locked ? 'disabled' : ''}><i class="fa-solid fa-file-import"></i> Bulk Import</button>
-        </div>
-        <div id="keysTableContainer">
-          ${this.keys.length === 0
-            ? '<div class="empty-state"><div class="empty-icon"><i class="fa-solid fa-file-lines"></i></div><h3>No translation keys</h3><p>Add keys to start translating your app.</p></div>'
-            : `<table class="translation-table">
-                <thead><tr>
-                  <th style="width:30%">Key</th>
-                  <th>Source (${this.getLocaleName(p.sourceLocale)})</th>
-                  <th>Translation (${this.esc(curLocaleName)})</th>
-                  <th style="width:60px"></th>
-                </tr></thead>
-                <tbody id="keysBody">${rows}</tbody>
-              </table>`}
-        </div>
-      </div>
-    `;
+    this.renderIntoApp(window.TranslateHubPreact.renderProjectDetail, {
+      project: this.currentProject,
+      keys: this.keys,
+      currentLocale: this.currentLocale
+    });
   },
 
   renderKeyRow(k) {
@@ -926,15 +739,7 @@ const app = {
     this.currentLocale = locale;
     this.saveViewState();
     this.updateRoute({ page: 'project', projectId: this.currentProject._id, locale }, true);
-    this.render(this.renderProjectDetail());
-  },
-
-  filterKeys(search) {
-    const rows = document.querySelectorAll('#keysBody tr');
-    const q = search.toLowerCase();
-    rows.forEach(row => {
-      row.style.display = row.dataset.key.toLowerCase().includes(q) ? '' : 'none';
-    });
+    this.renderProjectDetail();
   },
 
   showAddKeyModal() {
@@ -1309,37 +1114,14 @@ const app = {
       }));
       return;
     }
-    this.render(this.renderAdminsPage());
+    this.renderAdminsPage();
   },
 
   renderAdminsPage() {
-    const rows = this.admins.map(a => `
-      <tr>
-        <td><strong>${this.esc(a.displayName || a.username)}</strong></td>
-        <td><code style="font-size:13px">${this.esc(a.username)}</code></td>
-        <td><span class="role-badge ${a.role}">${a.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span></td>
-        <td><span class="status-badge ${a.active ? 'active' : 'inactive'}">${a.active ? 'Active' : 'Inactive'}</span></td>
-        <td style="text-align:right">
-          <button class="btn btn-sm" onclick="app.showEditAdminModal('${a._id}')"><i class="fa-solid fa-pen"></i> Edit</button>
-          ${a._id !== this.user._id ? `<button class="btn btn-sm btn-danger" onclick="app.confirmDeleteAdmin('${a._id}', '${this.esc(a.username)}')"><i class="fa-solid fa-trash"></i> Delete</button>` : ''}
-        </td>
-      </tr>
-    `).join('');
-
-    return `
-      ${UI.renderPageHero({
-        eyebrow: 'Access Control',
-        title: 'Admin Users',
-        description: 'Manage who can access the dashboard and what level of control they have.',
-        actions: '<button class="btn btn-primary" onclick="app.showCreateAdminModal()"><i class="fa-solid fa-user-plus"></i> New Admin</button>'
-      })}
-      <div class="card">
-        <table class="admin-table">
-          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
+    this.renderIntoApp(window.TranslateHubPreact.renderAdminsPage, {
+      admins: this.admins,
+      currentUserId: this.user._id
+    });
   },
 
   showCreateAdminModal() {
@@ -1763,4 +1545,12 @@ def t(key, locale="en"):
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => app.init());
+window.app = app;
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.TranslateHubPreact) {
+    app.init();
+    return;
+  }
+
+  window.addEventListener('translatehub:preact-ready', () => app.init(), { once: true });
+});
