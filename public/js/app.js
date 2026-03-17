@@ -642,43 +642,6 @@ const app = {
     });
   },
 
-  renderKeyRow(k) {
-    const p = this.currentProject;
-    const locked = !!p.isLocked;
-    const getT = (translations, locale) => {
-      if (!translations) return '';
-      if (translations instanceof Map) return translations.get(locale) || '';
-      return translations[locale] || '';
-    };
-
-    const src = getT(k.translations, p.sourceLocale);
-    const trans = getT(k.translations, this.currentLocale);
-
-    return `
-      <tr data-key-id="${k._id}" data-key="${this.esc(k.key)}">
-        <td>
-          <div class="key-cell">${this.esc(k.key)}</div>
-          ${k.description ? `<div class="key-desc">${this.esc(k.description)}</div>` : ''}
-        </td>
-        <td>
-          <input class="translation-input ${!src ? 'empty' : ''}" value="${this.esc(src)}" ${locked ? 'readonly' : ''}
-            placeholder="Source text..." data-locale="${p.sourceLocale}" data-key-id="${k._id}"
-            onchange="app.saveTranslation('${k._id}', '${p.sourceLocale}', this.value, this)">
-        </td>
-        <td>
-          ${this.currentLocale !== p.sourceLocale ? `
-            <input class="translation-input ${!trans ? 'empty' : ''}" value="${this.esc(trans)}" ${locked ? 'readonly' : ''}
-              placeholder="Enter translation..." data-locale="${this.currentLocale}" data-key-id="${k._id}"
-              onchange="app.saveTranslation('${k._id}', '${this.currentLocale}', this.value, this)">
-          ` : '<span style="color:var(--gray-400);font-size:13px">Same as source</span>'}
-        </td>
-        <td class="actions-cell">
-          <button class="btn-icon" onclick="app.confirmDeleteKey('${k._id}', '${this.esc(k.key)}')" title="Delete key" ${locked ? 'disabled' : ''}><i class="fa-solid fa-trash"></i></button>
-        </td>
-      </tr>
-    `;
-  },
-
   async saveTranslation(keyId, locale, value, inputEl) {
     if (this.currentProject.isLocked) {
       this.toast('Unlock this project before editing translations', 'error');
