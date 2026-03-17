@@ -1343,16 +1343,21 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1), background 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  backdrop-filter: blur(0px) saturate(100%);
+  -webkit-backdrop-filter: blur(0px) saturate(100%);
 }
 
 .modal-overlay.active {
   opacity: 1;
   pointer-events: auto;
   background: rgba(6, 10, 20, 0.42);
+  backdrop-filter: blur(10px) saturate(115%);
+  -webkit-backdrop-filter: blur(10px) saturate(115%);
 }
 
 .modal {
@@ -1361,7 +1366,8 @@ body::after {
   width: 90%;
   max-width: 560px;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  position: relative;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   border: 1px solid var(--surface-border);
   backdrop-filter: var(--backdrop-blur);
@@ -1380,7 +1386,71 @@ body::after {
 }
 
 .modal-stack {
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: modalContentFade 0.48s cubic-bezier(0.22, 1, 0.36, 1);
+  scrollbar-width: none;
+}
+
+.modal-stack::-webkit-scrollbar {
+  display: none;
+}
+
+.modal-stack::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  opacity: 0.85;
+}
+
+.modal::before,
+.modal::after {
+  content: '';
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.42;
+  filter: blur(24px);
+}
+
+.modal::before {
+  top: -42px;
+  left: -28px;
+  background: color-mix(in srgb, var(--primary) 34%, transparent);
+}
+
+.modal::after {
+  bottom: -54px;
+  right: -30px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: modalSectionIn 0.44s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.modal-header { animation-delay: 0.04s; }
+.modal-body { animation-delay: 0.1s; }
+.modal-footer { animation-delay: 0.16s; }
+
+.modal-stack.destructive .modal-header h3,
+.modal-stack.destructive .modal-header h3 i {
+  color: var(--danger);
+}
+
+.modal-overlay.active .modal-stack.destructive {
+  animation: modalContentDestructive 0.52s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-header {
@@ -2012,6 +2082,32 @@ body::after {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes modalSectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalContentDestructive {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.005);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

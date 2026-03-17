@@ -3,14 +3,14 @@ import htm from '/vendor/htm/dist/htm.module.js';
 
 const html = htm.bind(h);
 
-function ModalFrame({ title, icon, children, footer }) {
+function ModalFrame({ title, icon, body, footer, tone }) {
   return html`
-    <div class="modal-stack">
+    <div class=${`modal-stack ${tone || ''}`}>
       <div class="modal-header">
         <h3>${icon ? html`<i class=${`fa-solid ${icon}`}></i>` : ''} ${title}</h3>
         <button class="btn-icon" type="button" onClick=${() => window.app.closeModal()}><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-body">${children}</div>
+      <div class="modal-body">${body}</div>
       ${footer ? html`<div class="modal-footer">${footer}</div>` : ''}
     </div>
   `;
@@ -49,7 +49,7 @@ function CreateProjectModal({ modalState }) {
   return html`
     <${ModalFrame}
       title="New Project"
-      children=${html`
+      body=${html`
         <div class="form-group"><label>Project Name</label><input type="text" id="projectName" placeholder="My App" value=${modalState.name || ''} autoFocus onInput=${(event) => window.app.updateModalField('name', event.currentTarget.value)} /></div>
         <div class="form-group"><label>Description</label><textarea id="projectDesc" placeholder="Brief description of this project" rows="2" onInput=${(event) => window.app.updateModalField('description', event.currentTarget.value)}>${modalState.description || ''}</textarea></div>
         <div class="form-group">
@@ -83,7 +83,7 @@ function AddKeyModal({ modalState }) {
   return html`
     <${ModalFrame}
       title="Add Translation Key"
-      children=${html`
+      body=${html`
         <div class="form-group"><label>Key</label><input type="text" id="newKey" placeholder="e.g. welcome.title" autoFocus /><div class="form-hint">Use dot notation (e.g. nav.home, auth.login)</div></div>
         <div class="form-group"><label>Description (optional)</label><input type="text" id="newKeyDesc" placeholder="Context for translators" /></div>
         <div class="form-group"><label>Source text (${modalState.sourceName})</label><textarea id="newKeyValue" placeholder="Enter the source text" rows="2"></textarea></div>
@@ -100,7 +100,7 @@ function BulkAddModal({ modalState }) {
   return html`
     <${ModalFrame}
       title="Bulk Import Keys"
-      children=${html`
+      body=${html`
         <div class="form-group">
           <label>Paste JSON (${modalState.sourceName})</label>
           <textarea id="bulkJson" rows="10" placeholder='{"welcome.title":"Welcome"}'></textarea>
@@ -118,7 +118,7 @@ function BulkAddModal({ modalState }) {
 function ApiKeyModal() {
   const p = window.app.currentProject;
   return html`
-    <${ModalFrame} title="API Key" icon="fa-key" children=${html`
+    <${ModalFrame} title="API Key" icon="fa-key" body=${html`
       <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">Use this API key in your client app to fetch translations at runtime.</p>
       <div class="api-key-box">
         <code id="apiKeyDisplay">${p.apiKey}</code>
@@ -143,7 +143,7 @@ function ProjectPasswordActionModal({ modalState }) {
     <${ModalFrame}
       title=${locked ? 'Lock Project' : 'Unlock Project'}
       icon=${locked ? 'fa-lock' : 'fa-lock-open'}
-      children=${html`
+      body=${html`
         <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">Enter the project password to ${locked ? 'lock' : 'unlock'} <strong>${window.app.currentProject.name}</strong>.</p>
         <div class="form-group"><label>Project Password</label><input type="password" id="projectActionPassword" placeholder="Enter project password" autoFocus /></div>
       `}
@@ -162,7 +162,7 @@ function ProjectSettingsModal({ modalState }) {
     <${ModalFrame}
       title="Project Settings"
       icon="fa-gear"
-      children=${html`
+      body=${html`
         <div class="form-group"><label>Project Name</label><input type="text" id="editName" value=${modalState.name || ''} onInput=${(event) => window.app.updateModalField('name', event.currentTarget.value)} /></div>
         <div class="form-group"><label>Description</label><textarea id="editDesc" rows="2" onInput=${(event) => window.app.updateModalField('description', event.currentTarget.value)}>${modalState.description || ''}</textarea></div>
         <div class="form-group">
@@ -192,7 +192,8 @@ function DeleteProjectModal() {
     <${ModalFrame}
       title="Delete Project"
       icon="fa-triangle-exclamation"
-      children=${html`
+      tone="destructive"
+      body=${html`
         <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">Enter the project password to continue deleting <strong>${window.app.currentProject.name}</strong>.</p>
         <div class="form-group"><label>Project Password</label><input type="password" id="deleteProjectPassword" placeholder="Enter project password" autoFocus /></div>
       `}
@@ -208,7 +209,7 @@ function CreateAdminModal() {
   return html`
     <${ModalFrame}
       title="New Admin"
-      children=${html`
+      body=${html`
         <div class="form-group"><label>Display Name</label><input type="text" id="adminDisplayName" placeholder="John Doe" autoFocus /></div>
         <div class="form-group"><label>Username</label><input type="text" id="adminUsername" placeholder="johndoe" /></div>
         <div class="form-group"><label>Password</label><input type="password" id="adminPassword" placeholder="Min 6 characters" /></div>
@@ -228,7 +229,7 @@ function EditAdminModal({ modalState }) {
   return html`
     <${ModalFrame}
       title="Edit Admin"
-      children=${html`
+      body=${html`
         <div class="form-group"><label>Display Name</label><input type="text" id="editAdminDisplayName" value=${admin.displayName || ''} /></div>
         <div class="form-group"><label>Role</label><select id="editAdminRole" value=${admin.role}><option value="admin">Admin</option><option value="super_admin">Super Admin</option></select></div>
         <div class="form-group"><label>Status</label><select id="editAdminActive" value=${String(admin.active)}><option value="true">Active</option><option value="false">Inactive</option></select></div>
@@ -259,11 +260,14 @@ function ModalContent({ modalState }) {
 }
 
 function ModalHost({ isOpen, modalState }) {
+  const hasContent = isOpen && !!modalState;
   return html`
-    <div class=${`modal-overlay ${isOpen ? 'active' : ''}`} id="modalOverlay" onClick=${(event) => window.app.closeModal(event)} role="dialog" aria-modal="true" aria-label="Dialog window">
-      <div class="modal" id="modalContent">
-        <${ModalContent} modalState=${modalState} />
-      </div>
+    <div class=${`modal-overlay ${hasContent ? 'active' : ''}`} id="modalOverlay" onClick=${(event) => window.app.closeModal(event)} role="dialog" aria-modal="true" aria-label="Dialog window">
+      ${hasContent ? html`
+        <div class="modal" id="modalContent">
+          <${ModalContent} modalState=${modalState} />
+        </div>
+      ` : ''}
     </div>
   `;
 }
