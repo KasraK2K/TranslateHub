@@ -19,6 +19,8 @@ const app = {
   commandItems: [],
   activeCommandIndex: 0,
   lastFocusedElement: null,
+  modalContent: '',
+  isModalOpen: false,
   projects: [],
   keys: [],
   admins: [],
@@ -93,18 +95,29 @@ const app = {
   // ==================== Modal ====================
   openModal(html) {
     this.lastFocusedElement = document.activeElement;
-    document.getElementById('modalContent').innerHTML = html;
-    document.getElementById('modalOverlay').classList.add('active');
+    this.modalContent = html;
+    this.isModalOpen = true;
+    this.renderModalHost();
     setTimeout(() => A11y.focusFirst(document.getElementById('modalContent')), 0);
   },
 
   closeModal(e) {
     if (e && e.target !== e.currentTarget) return;
-    document.getElementById('modalOverlay').classList.remove('active');
+    this.isModalOpen = false;
+    this.modalContent = '';
+    this.renderModalHost();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
       this.lastFocusedElement = null;
     }
+  },
+
+  renderModalHost() {
+    if (!window.TranslateHubPreact) return;
+    window.TranslateHubPreact.renderModalHost(document.getElementById('modalRoot'), {
+      isOpen: this.isModalOpen,
+      content: this.modalContent
+    });
   },
 
   // ==================== Auth ====================
@@ -439,43 +452,15 @@ const app = {
   },
 
   renderSidebar() {
-    const isSuperAdmin = this.user.role === 'super_admin';
-    const filteredProjects = this.projects.filter((project) =>
-      project.name.toLowerCase().includes(this.sidebarProjectFilter.toLowerCase())
-    );
-    const projectItems = filteredProjects.map((project) => `
-      <button class="sidebar-item ${this.currentProjectId === project._id ? 'active' : ''}" type="button" onclick="app.showProject('${project._id}')">
-        <i class="fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon"></i> ${this.esc(project.name)}
-      </button>
-    `).join('');
-
-    document.getElementById('sidebar').innerHTML = `
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">Menu</div>
-        <button class="sidebar-item ${this.currentPage === 'projects' && !this.currentProjectId ? 'active' : ''}" type="button" onclick="app.navigate('projects')">
-          <i class="fa-solid fa-folder icon"></i> Projects
-        </button>
-        ${isSuperAdmin ? `
-        <button class="sidebar-item ${this.currentPage === 'admins' ? 'active' : ''}" type="button" onclick="app.navigate('admins')">
-          <i class="fa-solid fa-users icon"></i> Admins
-        </button>
-        ` : ''}
-        <button class="sidebar-item ${this.currentPage === 'docs' ? 'active' : ''}" type="button" onclick="app.navigate('docs')">
-          <i class="fa-solid fa-book icon"></i> Documentation
-        </button>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-head">
-          <div class="sidebar-section-label">Your Projects</div>
-          <span class="sidebar-count">${this.projects.length}</span>
-        </div>
-        <div class="sidebar-project-search">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" placeholder="Filter projects" value="${this.esc(this.sidebarProjectFilter)}" oninput="app.filterSidebarProjects(this.value)">
-        </div>
-        ${projectItems || '<div class="sidebar-empty">No matching projects</div>'}
-      </div>
-    `;
+    if (!window.TranslateHubPreact || !this.user) return;
+    window.TranslateHubPreact.renderSidebar(document.getElementById('sidebar'), {
+      projects: this.projects,
+      currentPage: this.currentPage,
+      currentProjectId: this.currentProjectId,
+      filter: this.sidebarProjectFilter,
+      isSuperAdmin: this.user.role === 'super_admin',
+      onFilter: (value) => this.filterSidebarProjects(value)
+    });
   },
 
   filterSidebarProjects(value) {
@@ -1253,235 +1238,7 @@ const app = {
   // ==================== Documentation ====================
   showDocs() {
     this.currentPage = 'docs';
-    this.render(`
-      ${UI.renderPageHero({
-        eyebrow: 'Reference',
-        title: 'Documentation',
-        description: 'Everything you need to configure, use, and integrate TranslateHub.'
-      })}
-      <div class="docs-content docs-wide">
-        <h1><i class="fa-solid fa-book"></i> TranslateHub Documentation</h1>
-        <p>TranslateHub is a translation management platform that lets you manage your application's translations externally. Your client apps fetch translations at runtime via a REST API, so you never need to redeploy to update text.</p>
-
-        <h2>Getting Started</h2>
-
-        <h3>1. Create a Project</h3>
-        <p>Go to the <strong>Projects</strong> page and click <strong>"+ New Project"</strong>. Fill in:</p>
-        <ul>
-          <li><strong>Project Name</strong> &ndash; A human-readable name for your app or service</li>
-          <li><strong>Source Locale</strong> &ndash; The primary language with a code and name (e.g. code: <code>en-US</code>, name: <code>United States</code>)</li>
-          <li><strong>Target Locales</strong> &ndash; Each language gets a code + name (e.g. code: <code>fa</code>, name: <code>Persian</code>)</li>
-        </ul>
-        <p>Locale codes can use any format you prefer: <code>en</code>, <code>en-US</code>, <code>en-UK</code>, <code>fr</code>, <code>fa</code>, etc. Each project gets its own <strong>API Key</strong> for client app integration.</p>
-
-        <h3>2. Add Translation Keys</h3>
-        <p>Translation keys are identifiers your app uses to reference specific text. We recommend <strong>dot notation</strong> for organization:</p>
-        <pre><code>common.welcome       = "Welcome to our app!"
-nav.home             = "Home"
-nav.settings         = "Settings"
-auth.login.title     = "Sign In"
-auth.login.email     = "Email Address"
-errors.notFound      = "Page not found"</code></pre>
-        <p>You can add keys one at a time via <strong>"+ Add Key"</strong>, or import many at once with <strong>"Bulk Import"</strong> by pasting a JSON object:</p>
-        <pre><code>{
-  "common.welcome": "Welcome to our app!",
-  "nav.home": "Home",
-  "nav.settings": "Settings"
-}</code></pre>
-
-        <h3>3. Translate</h3>
-        <p>On the project detail page, use the <strong>locale selector</strong> dropdown to switch between languages. Click into any translation cell to type the translated text. Changes save automatically when you leave the field.</p>
-        <p>The <strong>Translation Progress</strong> section shows completion percentage for each locale.</p>
-
-        <h2>Integrating with Your Application</h2>
-
-        <h3>Getting Your API Key</h3>
-        <p>Open your project, click <strong>"API Key"</strong>, and copy the key. It looks like: <code>th_a1b2c3d4e5...</code></p>
-
-        <div class="docs-callout info">
-          <strong>Important:</strong> The API key identifies your project. Keep it in environment variables, not in source code.
-        </div>
-
-        <h3>REST API Endpoints</h3>
-        <p>All public endpoints require the <code>X-API-Key</code> header.</p>
-
-        <h3>Fetch translations for a single locale</h3>
-        <pre><code>GET /api/v1/translations/:localeCode
-
-// Example: fetch French translations
-GET /api/v1/translations/fr
-Headers: { "X-API-Key": "th_your_key_here" }
-
-// Response
-{
-  "locale": "fr",
-  "localeName": "French",
-  "projectId": "...",
-  "translations": {
-    "common.welcome": "Bienvenue dans notre application !",
-    "nav.home": "Accueil"
-  }
-}</code></pre>
-        <p>If a key is not translated in the requested locale, the source locale value is returned as fallback.</p>
-
-        <h3>Fetch all translations (all locales)</h3>
-        <pre><code>GET /api/v1/translations
-
-// Response
-{
-  "projectId": "...",
-  "locales": [
-    { "code": "en-US", "name": "United States" },
-    { "code": "fr", "name": "French" }
-  ],
-  "sourceLocale": "en-US",
-  "translations": {
-    "en-US": { "common.welcome": "Welcome!", ... },
-    "fr": { "common.welcome": "Bienvenue !", ... }
-  }
-}</code></pre>
-
-        <h3>Get available locales</h3>
-        <pre><code>GET /api/v1/locales
-
-// Response
-{
-  "sourceLocale": "en-US",
-  "locales": [
-    { "code": "en-US", "name": "United States" },
-    { "code": "fr", "name": "French" },
-    { "code": "fa", "name": "Persian" }
-  ]
-}</code></pre>
-
-        <h2>Integration Examples</h2>
-
-        <h3>JavaScript / React</h3>
-        <pre><code>// i18n.js - Simple translation loader
-const API_URL = 'https://your-server.com/api/v1';
-const API_KEY = process.env.TRANSLATE_HUB_KEY;
-
-let translations = {};
-
-export async function loadTranslations(locale = 'en') {
-  const res = await fetch(\`\${API_URL}/translations/\${locale}\`, {
-    headers: { 'X-API-Key': API_KEY }
-  });
-  const data = await res.json();
-  translations = data.translations;
-}
-
-export function t(key, fallback = key) {
-  return translations[key] || fallback;
-}
-
-// Usage:
-// await loadTranslations('fr');
-// t('common.welcome') => "Bienvenue !"</code></pre>
-
-        <h3>Node.js / Express</h3>
-        <pre><code>const axios = require('axios');
-
-const cache = {};
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function getTranslations(locale) {
-  const now = Date.now();
-  if (cache[locale] && now - cache[locale].time < CACHE_TTL) {
-    return cache[locale].data;
-  }
-
-  const res = await axios.get(
-    \`http://localhost:3000/api/v1/translations/\${locale}\`,
-    { headers: { 'X-API-Key': process.env.TRANSLATE_HUB_KEY } }
-  );
-
-  cache[locale] = { data: res.data.translations, time: now };
-  return res.data.translations;
-}
-
-// Express middleware
-module.exports = async (req, res, next) => {
-  const locale = req.query.lang || 'en';
-  req.t = await getTranslations(locale);
-  next();
-};</code></pre>
-
-        <h3>Python / Flask</h3>
-        <pre><code>import requests
-from functools import lru_cache
-
-API_URL = "http://localhost:3000/api/v1"
-API_KEY = "th_your_key_here"
-
-@lru_cache(maxsize=32)
-def get_translations(locale="en"):
-    res = requests.get(
-        f"{API_URL}/translations/{locale}",
-        headers={"X-API-Key": API_KEY}
-    )
-    return res.json()["translations"]
-
-def t(key, locale="en"):
-    return get_translations(locale).get(key, key)</code></pre>
-
-        <h2>Admin Management</h2>
-        <p>Super admins can manage other admin users from the <strong>Admins</strong> page in the sidebar.</p>
-        <ul>
-          <li><strong>Super Admin</strong> &ndash; Full access: manage projects, translations, and other admins</li>
-          <li><strong>Admin</strong> &ndash; Can manage projects and translations, but cannot manage other users</li>
-        </ul>
-        <p>Admins can be deactivated (instead of deleted) to temporarily revoke access without losing their account.</p>
-
-        <h2>Locale Codes</h2>
-        <p>TranslateHub supports any locale code format you prefer. Common conventions:</p>
-        <ul>
-          <li><code>en</code>, <code>fr</code>, <code>de</code> &ndash; Simple ISO 639-1 language codes</li>
-          <li><code>en-US</code>, <code>en-UK</code>, <code>pt-BR</code> &ndash; Language + region (IETF BCP 47)</li>
-          <li><code>fa</code>, <code>ar</code>, <code>zh-Hans</code> &ndash; Right-to-left and script variants</li>
-        </ul>
-        <p>Each locale also has a <strong>display name</strong> (e.g. "United States", "Persian") that appears in the dashboard for easy identification.</p>
-
-        <h2>Best Practices</h2>
-        <ul>
-          <li><strong>Use dot notation</strong> for keys (e.g. <code>auth.login.title</code>) to keep translations organized</li>
-          <li><strong>Add descriptions</strong> to keys to give translators context about where the text appears</li>
-          <li><strong>Cache translations</strong> on the client side and refresh periodically (the API sets a 5-minute cache header)</li>
-          <li><strong>Use fallback logic</strong> &ndash; if a translation is missing, fall back to the source locale</li>
-          <li><strong>Keep API keys secret</strong> &ndash; store them in environment variables</li>
-          <li><strong>Regenerate API keys</strong> if they are ever exposed publicly</li>
-        </ul>
-
-        <h2>API Reference Summary</h2>
-        <div class="card" style="margin-top:12px">
-          <table class="admin-table">
-            <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
-            <tbody>
-              <tr><td><code>GET</code></td><td><code>/api/v1/translations/:locale</code></td><td>API Key</td><td>Get translations for one locale</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/v1/translations</code></td><td>API Key</td><td>Get all translations for all locales</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/v1/locales</code></td><td>API Key</td><td>Get available locales with names</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/auth/status</code></td><td>None</td><td>Check if setup is needed</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/auth/setup</code></td><td>None</td><td>Create initial super admin</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/auth/login</code></td><td>None</td><td>Login and get JWT token</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/projects</code></td><td>JWT</td><td>List all projects</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/projects</code></td><td>JWT</td><td>Create a new project</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Get project details + stats</td></tr>
-              <tr><td><code>PUT</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Update a project</td></tr>
-              <tr><td><code>DELETE</code></td><td><code>/api/projects/:id</code></td><td>JWT</td><td>Delete project and all keys</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/projects/:id/keys</code></td><td>JWT</td><td>List translation keys</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/projects/:id/keys</code></td><td>JWT</td><td>Add a translation key</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/projects/:id/keys/bulk</code></td><td>JWT</td><td>Bulk import keys</td></tr>
-              <tr><td><code>PATCH</code></td><td><code>/api/projects/:id/keys/:keyId/translate</code></td><td>JWT</td><td>Update single translation</td></tr>
-              <tr><td><code>DELETE</code></td><td><code>/api/projects/:id/keys/:keyId</code></td><td>JWT</td><td>Delete a translation key</td></tr>
-              <tr><td><code>GET</code></td><td><code>/api/admins</code></td><td>JWT (Super)</td><td>List all admins</td></tr>
-              <tr><td><code>POST</code></td><td><code>/api/admins</code></td><td>JWT (Super)</td><td>Create a new admin</td></tr>
-              <tr><td><code>PUT</code></td><td><code>/api/admins/:id</code></td><td>JWT (Super)</td><td>Update an admin</td></tr>
-              <tr><td><code>DELETE</code></td><td><code>/api/admins/:id</code></td><td>JWT (Super)</td><td>Delete an admin</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `);
+    this.renderIntoApp(window.TranslateHubPreact.renderDocsPage);
   },
 
   // ==================== Helpers ====================
@@ -1507,6 +1264,7 @@ def t(key, locale="en"):
   // ==================== Init ====================
   async init() {
     this.setTheme(this.currentTheme);
+    this.renderModalHost();
     document.addEventListener('click', () => this.closeThemeMenu());
     window.addEventListener('hashchange', () => this.handleRouteChange());
     document.addEventListener('keydown', (event) => {
