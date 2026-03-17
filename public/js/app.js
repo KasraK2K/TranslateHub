@@ -19,7 +19,7 @@ const app = {
   commandItems: [],
   activeCommandIndex: 0,
   lastFocusedElement: null,
-  modalContent: '',
+  modalState: null,
   isModalOpen: false,
   projects: [],
   keys: [],
@@ -93,9 +93,9 @@ const app = {
   },
 
   // ==================== Modal ====================
-  openModal(html) {
+  openModal(modalState) {
     this.lastFocusedElement = document.activeElement;
-    this.modalContent = html;
+    this.modalState = modalState;
     this.isModalOpen = true;
     this.renderModalHost();
     setTimeout(() => A11y.focusFirst(document.getElementById('modalContent')), 0);
@@ -104,7 +104,7 @@ const app = {
   closeModal(e) {
     if (e && e.target !== e.currentTarget) return;
     this.isModalOpen = false;
-    this.modalContent = '';
+    this.modalState = null;
     this.renderModalHost();
     if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
       this.lastFocusedElement.focus();
@@ -116,8 +116,40 @@ const app = {
     if (!window.TranslateHubPreact) return;
     window.TranslateHubPreact.renderModalHost(document.getElementById('modalRoot'), {
       isOpen: this.isModalOpen,
-      content: this.modalContent
+      modalState: this.modalState
     });
+  },
+
+  addModalLocaleRow(kind) {
+    if (!this.modalState) return;
+    const key = kind === 'settings' ? 'settingsLocales' : 'targetLocales';
+    const current = this.modalState[key] || [];
+    this.modalState = { ...this.modalState, [key]: [...current, { code: '', name: '' }] };
+    this.renderModalHost();
+  },
+
+  updateModalLocaleRow(kind, index, field, value) {
+    if (!this.modalState) return;
+    const key = kind === 'settings' ? 'settingsLocales' : 'targetLocales';
+    const current = [...(this.modalState[key] || [])];
+    current[index] = { ...current[index], [field]: value };
+    this.modalState = { ...this.modalState, [key]: current };
+    this.renderModalHost();
+  },
+
+  updateModalField(field, value) {
+    if (!this.modalState) return;
+    this.modalState = { ...this.modalState, [field]: value };
+    this.renderModalHost();
+  },
+
+  removeModalLocaleRow(kind, index) {
+    if (!this.modalState) return;
+    const key = kind === 'settings' ? 'settingsLocales' : 'targetLocales';
+    const current = [...(this.modalState[key] || [])];
+    current.splice(index, 1);
+    this.modalState = { ...this.modalState, [key]: current };
+    this.renderModalHost();
   },
 
   // ==================== Auth ====================
@@ -524,76 +556,23 @@ const app = {
   },
 
   showCreateProjectModal() {
-    this.openModal(`
-      <div class="modal-header">
-        <h3>New Project</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Project Name</label>
-          <input type="text" id="projectName" placeholder="My App" autofocus>
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="projectDesc" placeholder="Brief description of this project" rows="2"></textarea>
-        </div>
-        <div class="form-group">
-          <label>Source Locale</label>
-          <div class="form-row">
-            <div>
-              <input type="text" id="projectSourceCode" value="en" placeholder="Code (e.g. en-US)">
-            </div>
-            <div>
-              <input type="text" id="projectSourceName" value="English" placeholder="Name (e.g. English)">
-            </div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Target Locales</label>
-          <div id="targetLocaleRows"></div>
-          <button class="btn btn-sm" style="margin-top:8px" onclick="app.addLocaleRow()">
-            <i class="fa-solid fa-plus"></i> Add Locale
-          </button>
-          <div class="form-hint">Add each target language with a code and display name.</div>
-        </div>
-        <div class="form-group">
-          <label>Project Password</label>
-          <input type="password" id="projectPassword" placeholder="Required for lock, unlock, and delete" autocomplete="new-password">
-          <div class="form-hint">Use at least 6 characters. You will need this password for lock, unlock, and delete actions.</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.createProject()">Create Project</button>
-      </div>
-    `);
-    this.addLocaleRow();
-  },
-
-  addLocaleRow() {
-    const container = document.getElementById('targetLocaleRows');
-    const row = document.createElement('div');
-    row.className = 'form-row locale-entry-row';
-    row.style.marginBottom = '8px';
-    row.innerHTML = `
-      <div><input type="text" class="locale-code-input" placeholder="Code (e.g. fr, de, fa)"></div>
-      <div style="display:flex;gap:8px">
-        <input type="text" class="locale-name-input" placeholder="Name (e.g. French)" style="flex:1">
-        <button class="btn-icon" onclick="this.closest('.locale-entry-row').remove()" title="Remove">
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </div>
-    `;
-    container.appendChild(row);
+    this.openModal({
+      type: 'create-project',
+      name: '',
+      description: '',
+      sourceCode: 'en',
+      sourceName: 'English',
+      projectPassword: '',
+      targetLocales: [{ code: '', name: '' }]
+    });
   },
 
   async createProject() {
-    const name = document.getElementById('projectName').value.trim();
-    const description = document.getElementById('projectDesc').value.trim();
-    const sourceCode = document.getElementById('projectSourceCode').value.trim() || 'en';
-    const sourceName = document.getElementById('projectSourceName').value.trim() || 'English';
-    const projectPassword = document.getElementById('projectPassword').value;
+    const name = String(this.modalState && this.modalState.name || '').trim();
+    const description = String(this.modalState && this.modalState.description || '').trim();
+    const sourceCode = String(this.modalState && this.modalState.sourceCode || 'en').trim() || 'en';
+    const sourceName = String(this.modalState && this.modalState.sourceName || 'English').trim() || 'English';
+    const projectPassword = String(this.modalState && this.modalState.projectPassword || '');
 
     const nameError = Helpers.validateRequired([
       { value: name, message: 'Project name is required' }
@@ -603,7 +582,7 @@ const app = {
     const passwordError = Helpers.validateMinLength(projectPassword, 6, 'Project password must be at least 6 characters');
     if (passwordError) return this.toast(passwordError, 'error');
 
-    const locales = this.collectLocales('.locale-entry-row', '.locale-code-input', '.locale-name-input', {
+    const locales = this.collectLocaleEntries((this.modalState && this.modalState.targetLocales) || [], {
       sourceCode,
       sourceName
     });
@@ -729,32 +708,7 @@ const app = {
 
   showAddKeyModal() {
     if (this.currentProject.isLocked) return this.toast('Unlock this project before adding keys', 'error');
-    const srcName = this.getLocaleName(this.currentProject.sourceLocale);
-    this.openModal(`
-      <div class="modal-header">
-        <h3>Add Translation Key</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Key</label>
-          <input type="text" id="newKey" placeholder="e.g. welcome.title" autofocus>
-          <div class="form-hint">Use dot notation (e.g. nav.home, auth.login)</div>
-        </div>
-        <div class="form-group">
-          <label>Description (optional)</label>
-          <input type="text" id="newKeyDesc" placeholder="Context for translators">
-        </div>
-        <div class="form-group">
-          <label>Source text (${this.esc(srcName)})</label>
-          <textarea id="newKeyValue" placeholder="Enter the source text" rows="2"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.addKey()">Add Key</button>
-      </div>
-    `);
+    this.openModal({ type: 'add-key', sourceName: this.getLocaleName(this.currentProject.sourceLocale) });
   },
 
   async addKey() {
@@ -780,24 +734,7 @@ const app = {
 
   showBulkAddModal() {
     if (this.currentProject.isLocked) return this.toast('Unlock this project before importing keys', 'error');
-    const srcName = this.getLocaleName(this.currentProject.sourceLocale);
-    this.openModal(`
-      <div class="modal-header">
-        <h3>Bulk Import Keys</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Paste JSON (${this.esc(srcName)})</label>
-          <textarea id="bulkJson" rows="10" placeholder='{\n  "welcome.title": "Welcome",\n  "nav.home": "Home"\n}'></textarea>
-          <div class="form-hint">Flat key-value JSON object.</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.bulkImport()">Import</button>
-      </div>
-    `);
+    this.openModal({ type: 'bulk-add', sourceName: this.getLocaleName(this.currentProject.sourceLocale) });
   },
 
   async bulkImport() {
@@ -820,33 +757,7 @@ const app = {
   },
 
   showApiKeyModal() {
-    const p = this.currentProject;
-    this.openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-key"></i> API Key</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
-          Use this API key in your client app to fetch translations at runtime.
-        </p>
-        <div class="api-key-box">
-          <code id="apiKeyDisplay">${p.apiKey}</code>
-          <button class="btn btn-sm" onclick="app.copyApiKey()"><i class="fa-solid fa-copy"></i> Copy</button>
-        </div>
-        <div style="margin-top:20px;padding:16px;background:var(--gray-50);border-radius:6px;font-size:13px">
-          <strong>Usage Example:</strong>
-          <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all"><code>fetch('${window.location.origin}/api/v1/translations/${p.sourceLocale}', {
-  headers: { 'X-API-Key': '${p.apiKey}' }
-})
-.then(res => res.json())
-.then(data => console.log(data.translations));</code></pre>
-        </div>
-        <div style="margin-top:12px">
-          <button class="btn btn-sm btn-danger" onclick="app.regenerateApiKey()"><i class="fa-solid fa-rotate"></i> Regenerate Key</button>
-        </div>
-      </div>
-    `);
+    this.openModal({ type: 'api-key' });
   },
 
   copyApiKey() {
@@ -865,26 +776,7 @@ const app = {
   },
 
   showProjectPasswordModal(action) {
-    const locked = action === 'lock';
-    this.openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid ${locked ? 'fa-lock' : 'fa-lock-open'}"></i> ${locked ? 'Lock Project' : 'Unlock Project'}</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
-          Enter the project password to ${locked ? 'lock' : 'unlock'} <strong>${this.esc(this.currentProject.name)}</strong>.
-        </p>
-        <div class="form-group">
-          <label>Project Password</label>
-          <input type="password" id="projectActionPassword" placeholder="Enter project password" autofocus>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.submitProjectLockAction('${action}')">${locked ? 'Lock Project' : 'Unlock Project'}</button>
-      </div>
-    `);
+    this.openModal({ type: 'project-password-action', action });
   },
 
   async submitProjectLockAction(action) {
@@ -904,78 +796,23 @@ const app = {
 
   showProjectSettingsModal() {
     const p = this.currentProject;
-    const hasPassword = !!p.hasProjectPassword;
-    const localeRows = this.getProjectLocales(p).map((locale) => `
-      <div class="form-row locale-setting-row" style="margin-bottom:8px" data-is-source="${locale.code === p.sourceLocale}">
-        <div><input type="text" class="setting-locale-code" value="${this.esc(locale.code)}" placeholder="Code" ${locale.code === p.sourceLocale ? 'readonly style="background:var(--gray-100)"' : ''}></div>
-        <div style="display:flex;gap:8px">
-          <input type="text" class="setting-locale-name" value="${this.esc(locale.name)}" placeholder="Name" style="flex:1">
-          ${locale.code !== p.sourceLocale ? `<button class="btn-icon" onclick="this.closest('.locale-setting-row').remove()" title="Remove"><i class="fa-solid fa-trash"></i></button>` : '<div style="width:30px"></div>'}
-        </div>
-      </div>
-    `).join('');
-
-    this.openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-gear"></i> Project Settings</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Project Name</label>
-          <input type="text" id="editName" value="${this.esc(p.name)}">
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="editDesc" rows="2">${this.esc(p.description || '')}</textarea>
-        </div>
-        <div class="form-group">
-          <label>Locales</label>
-          <div class="form-hint" style="margin-bottom:8px">Source locale (${p.sourceLocale}) code cannot be changed.</div>
-          <div id="settingsLocaleRows">${localeRows}</div>
-          <button class="btn btn-sm" style="margin-top:8px" onclick="app.addSettingsLocaleRow()">
-            <i class="fa-solid fa-plus"></i> Add Locale
-          </button>
-        </div>
-        <div class="form-group">
-          <label>${hasPassword ? 'Change Project Password' : 'Add Project Password'}</label>
-          ${hasPassword ? `
-            <input type="password" id="editCurrentProjectPassword" placeholder="Current project password" autocomplete="current-password" style="margin-bottom:8px">
-          ` : ''}
-          <input type="password" id="editProjectPassword" placeholder="${hasPassword ? 'New project password' : 'Set a project password'}" autocomplete="new-password" style="margin-bottom:8px">
-          <input type="password" id="editProjectPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password">
-          <div class="form-hint">${hasPassword ? 'To change the password, enter the current password, a new password, and confirm it.' : 'This project has no password yet. Add one to enable lock, unlock, and delete protection.'}</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.updateProject()">Save</button>
-      </div>
-    `);
-  },
-
-  addSettingsLocaleRow() {
-    const container = document.getElementById('settingsLocaleRows');
-    const row = document.createElement('div');
-    row.className = 'form-row locale-setting-row';
-    row.style.marginBottom = '8px';
-    row.innerHTML = `
-      <div><input type="text" class="setting-locale-code" placeholder="Code (e.g. ja)"></div>
-      <div style="display:flex;gap:8px">
-        <input type="text" class="setting-locale-name" placeholder="Name (e.g. Japanese)" style="flex:1">
-        <button class="btn-icon" onclick="this.closest('.locale-setting-row').remove()" title="Remove"><i class="fa-solid fa-trash"></i></button>
-      </div>
-    `;
-    container.appendChild(row);
+    this.openModal({
+      type: 'project-settings',
+      name: p.name,
+      description: p.description || '',
+      currentProjectPassword: '',
+      projectPassword: '',
+      confirmProjectPassword: '',
+      settingsLocales: this.getProjectLocales(p)
+    });
   },
 
   async updateProject() {
-    const name = document.getElementById('editName').value.trim();
-    const description = document.getElementById('editDesc').value.trim();
-    const currentProjectPasswordEl = document.getElementById('editCurrentProjectPassword');
-    const projectPassword = document.getElementById('editProjectPassword').value;
-    const confirmProjectPassword = document.getElementById('editProjectPasswordConfirm').value;
-    const currentProjectPassword = currentProjectPasswordEl ? currentProjectPasswordEl.value : '';
+    const name = String(this.modalState && this.modalState.name || '').trim();
+    const description = String(this.modalState && this.modalState.description || '').trim();
+    const projectPassword = String(this.modalState && this.modalState.projectPassword || '');
+    const confirmProjectPassword = String(this.modalState && this.modalState.confirmProjectPassword || '');
+    const currentProjectPassword = String(this.modalState && this.modalState.currentProjectPassword || '');
     const nameError = Helpers.validateRequired([
       { value: name, message: 'Name is required' }
     ]);
@@ -998,7 +835,7 @@ const app = {
       }
     }
 
-    const locales = this.collectLocales('.locale-setting-row', '.setting-locale-code', '.setting-locale-name', {
+    const locales = this.collectLocaleEntries((this.modalState && this.modalState.settingsLocales) || [], {
       sourceCode: this.currentProject.sourceLocale,
       sourceName: this.getLocaleName(this.currentProject.sourceLocale)
     });
@@ -1027,25 +864,7 @@ const app = {
       return;
     }
 
-    this.openModal(`
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-triangle-exclamation"></i> Delete Project</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">
-          Enter the project password to continue deleting <strong>${this.esc(this.currentProject.name)}</strong>.
-        </p>
-        <div class="form-group">
-          <label>Project Password</label>
-          <input type="password" id="deleteProjectPassword" placeholder="Enter project password" autofocus>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-danger" onclick="app.submitDeleteProjectPassword()"><i class="fa-solid fa-trash"></i> Continue</button>
-      </div>
-    `);
+    this.openModal({ type: 'delete-project' });
   },
 
   async submitDeleteProjectPassword() {
@@ -1110,37 +929,7 @@ const app = {
   },
 
   showCreateAdminModal() {
-    this.openModal(`
-      <div class="modal-header">
-        <h3>New Admin</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Display Name</label>
-          <input type="text" id="adminDisplayName" placeholder="John Doe" autofocus>
-        </div>
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="adminUsername" placeholder="johndoe">
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="adminPassword" placeholder="Min 6 characters">
-        </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="adminRole">
-            <option value="admin">Admin</option>
-            <option value="super_admin">Super Admin</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.createAdmin()">Create Admin</button>
-      </div>
-    `);
+    this.openModal({ type: 'create-admin' });
   },
 
   async createAdmin() {
@@ -1172,41 +961,7 @@ const app = {
   showEditAdminModal(adminId) {
     const a = this.admins.find(x => x._id === adminId);
     if (!a) return;
-
-    this.openModal(`
-      <div class="modal-header">
-        <h3>Edit Admin</h3>
-        <button class="btn-icon" onclick="app.closeModal()"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Display Name</label>
-          <input type="text" id="editAdminDisplayName" value="${this.esc(a.displayName || '')}">
-        </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="editAdminRole">
-            <option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Admin</option>
-            <option value="super_admin" ${a.role === 'super_admin' ? 'selected' : ''}>Super Admin</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Status</label>
-          <select id="editAdminActive">
-            <option value="true" ${a.active ? 'selected' : ''}>Active</option>
-            <option value="false" ${!a.active ? 'selected' : ''}>Inactive</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>New Password (leave blank to keep current)</label>
-          <input type="password" id="editAdminPassword" placeholder="Leave blank to keep unchanged">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" onclick="app.closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="app.updateAdmin('${a._id}')">Save</button>
-      </div>
-    `);
+    this.openModal({ type: 'edit-admin', adminId });
   },
 
   async updateAdmin(adminId) {
@@ -1242,11 +997,7 @@ const app = {
   },
 
   // ==================== Helpers ====================
-  collectLocales(rowSelector, codeSelector, nameSelector, { sourceCode, sourceName }) {
-    const entries = Array.from(document.querySelectorAll(rowSelector)).map((row) => ({
-      code: row.querySelector(codeSelector).value.trim(),
-      name: row.querySelector(nameSelector).value.trim()
-    }));
+  collectLocaleEntries(entries, { sourceCode, sourceName }) {
     const result = Helpers.collectLocaleEntries(entries, { sourceCode, sourceName });
 
     if (result.error) {
