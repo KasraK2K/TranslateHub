@@ -4,8 +4,29 @@ const Project = require('../../models/Project');
 const TranslationKey = require('../../models/TranslationKey');
 const { requireAuth } = require('../../middleware/auth');
 
+function normalizePageKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isValidPageKey(value) {
+  return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(value);
+}
+
 async function getProjectWithPassword(projectId) {
   return Project.findById(projectId).select('+projectPassword');
+}
+
+function getPageSummary(page) {
+  return {
+    _id: page._id,
+    name: page.name,
+    pageKey: page.pageKey,
+    description: page.description || ''
+  };
+}
+
+async function getPageKeyCount(projectId, pageId) {
+  return TranslationKey.countDocuments({ projectId, pageId });
 }
 
 // All dashboard project routes require authentication
@@ -15,7 +36,11 @@ router.use(requireAuth);
 router.get('/', async (req, res) => {
   try {
     const projects = await Project.find().sort({ createdAt: -1 });
-    res.json(projects);
+    const payload = await Promise.all(projects.map(async (project) => ({
+      ...project.toObject(),
+      stats: await project.getStats()
+    })));
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -30,12 +55,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Project password must be at least 6 characters' });
     }
 
-    // locales is now an array of { code, name }
     const project = new Project({
       name,
       description,
       sourceLocale: sourceLocale || 'en',
       locales: locales || [{ code: sourceLocale || 'en', name: 'English' }],
+      pages: [],
       projectPassword
     });
 
@@ -46,6 +71,163 @@ router.post('/', async (req, res) => {
       return res.status(409).json({ error: 'A project with this name already exists' });
     }
     res.status(400).json({ error: error.message });
+  }
+});
+
+// GET /api/projects/:projectId/pages - List pages in a project
+router.get('/:projectId/pages', async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const pages = await Promise.all(project.pages.map(async (page) => ({
+      ...getPageSummary(page),
+      keyCount: await getPageKeyCount(project._id, page._id)
+    })));
+
+    res.json(pages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/projects/:projectId/pages - Create a page
+router.post('/:projectId/pages', async (req, res) => {
+  try {
+    const project = await getProjectWithPassword(req.params.projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.isLocked) {
+      return res.status(423).json({ error: 'Unlock this project before changing pages' });
+    }
+
+    const name = String(req.body.name || '').trim();
+    const pageKey = normalizePageKey(req.body.pageKey);
+    const description = String(req.body.description || '').trim();
+
+    if (!name) {
+      return res.status(400).json({ error: 'Page name is required' });
+    }
+
+    if (!pageKey) {
+      return res.status(400).json({ error: 'Page key is required' });
+    }
+
+    if (!isValidPageKey(pageKey)) {
+      return res.status(400).json({ error: 'Page key may contain only lowercase letters, numbers, hyphens, and underscores' });
+    }
+
+    if (project.hasPageKey(pageKey)) {
+      return res.status(409).json({ error: `Page key '${pageKey}' already exists in this project` });
+    }
+
+    project.pages.push({ name, pageKey, description });
+    await project.save();
+
+    const createdPage = project.pages[project.pages.length - 1];
+    res.status(201).json({ ...getPageSummary(createdPage), keyCount: 0 });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT /api/projects/:projectId/pages/:pageId - Update a page
+router.put('/:projectId/pages/:pageId', async (req, res) => {
+  try {
+    const project = await getProjectWithPassword(req.params.projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.isLocked) {
+      return res.status(423).json({ error: 'Unlock this project before changing pages' });
+    }
+
+    const page = project.getPageById(req.params.pageId);
+    if (!page) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+
+    const name = req.body.name === undefined ? page.name : String(req.body.name || '').trim();
+    const description = req.body.description === undefined ? page.description || '' : String(req.body.description || '').trim();
+    const nextPageKey = req.body.pageKey === undefined ? page.pageKey : normalizePageKey(req.body.pageKey);
+
+    if (!name) {
+      return res.status(400).json({ error: 'Page name is required' });
+    }
+
+    if (!nextPageKey) {
+      return res.status(400).json({ error: 'Page key is required' });
+    }
+
+    if (!isValidPageKey(nextPageKey)) {
+      return res.status(400).json({ error: 'Page key may contain only lowercase letters, numbers, hyphens, and underscores' });
+    }
+
+    if (project.hasPageKey(nextPageKey, page._id)) {
+      return res.status(409).json({ error: `Page key '${nextPageKey}' already exists in this project` });
+    }
+
+    if (nextPageKey !== page.pageKey) {
+      const keyCount = await getPageKeyCount(project._id, page._id);
+      if (keyCount > 0) {
+        return res.status(409).json({ error: 'Page key cannot be changed after translation keys exist for this page' });
+      }
+    }
+
+    page.name = name;
+    page.description = description;
+    page.pageKey = nextPageKey;
+
+    await project.save();
+
+    res.json({
+      ...getPageSummary(page),
+      keyCount: await getPageKeyCount(project._id, page._id)
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE /api/projects/:projectId/pages/:pageId - Delete a page
+router.delete('/:projectId/pages/:pageId', async (req, res) => {
+  try {
+    const project = await getProjectWithPassword(req.params.projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.isLocked) {
+      return res.status(423).json({ error: 'Unlock this project before changing pages' });
+    }
+
+    const page = project.getPageById(req.params.pageId);
+    if (!page) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+
+    const force = req.body && req.body.force === true;
+    const keyCount = await getPageKeyCount(project._id, page._id);
+
+    if (keyCount > 0 && !force) {
+      return res.status(409).json({ error: 'Page cannot be deleted because it still contains translation keys' });
+    }
+
+    if (force) {
+      await TranslationKey.deleteMany({ projectId: project._id, pageId: page._id });
+    }
+
+    project.pages.pull(page._id);
+    await project.save();
+
+    res.json({ message: 'Page deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -60,6 +242,10 @@ router.get('/:id', async (req, res) => {
     const stats = await project.getStats();
     const payload = project.toObject();
     payload.hasProjectPassword = Boolean(project.projectPassword);
+    payload.pages = await Promise.all(project.pages.map(async (page) => ({
+      ...getPageSummary(page),
+      keyCount: await getPageKeyCount(project._id, page._id)
+    })));
     delete payload.projectPassword;
     res.json({ ...payload, stats });
   } catch (error) {
@@ -86,7 +272,7 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ error: 'Project password must be at least 6 characters' });
       }
 
-       if (project.projectPassword) {
+      if (project.projectPassword) {
         if (!currentProjectPassword) {
           return res.status(400).json({ error: 'Current project password is required' });
         }

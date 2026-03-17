@@ -16,10 +16,20 @@
     const query = new URLSearchParams(parts[1] || '');
     const segments = path.split('/').filter(Boolean);
 
+    if (segments[0] === 'projects' && segments[1] && segments[2] === 'pages' && segments[3]) {
+      return {
+        page: 'project',
+        projectId: decodeURIComponent(segments[1]),
+        pageId: decodeURIComponent(segments[3]),
+        locale: query.get('locale') || null
+      };
+    }
+
     if (segments[0] === 'projects' && segments[1]) {
       return {
         page: 'project',
         projectId: decodeURIComponent(segments[1]),
+        pageId: null,
         locale: query.get('locale') || null
       };
     }
@@ -38,7 +48,8 @@
       const query = new URLSearchParams();
       if (route.locale) query.set('locale', route.locale);
       const suffix = query.toString() ? `?${query.toString()}` : '';
-      return `#/projects/${encodeURIComponent(route.projectId)}${suffix}`;
+      const pageSegment = route.pageId ? `/pages/${encodeURIComponent(route.pageId)}` : '';
+      return `#/projects/${encodeURIComponent(route.projectId)}${pageSegment}${suffix}`;
     }
 
     return '#/projects';

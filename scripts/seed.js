@@ -13,6 +13,11 @@ const DEMO_PROJECT = {
   description: 'A sample project to demonstrate TranslateHub',
   sourceLocale: 'en-US',
   projectPassword: 'demo1234',
+  pages: [
+    { name: 'Dashboard', pageKey: 'dashboard', description: 'Main dashboard experience' },
+    { name: 'Auth', pageKey: 'auth', description: 'Authentication screens' },
+    { name: 'Profile', pageKey: 'profile', description: 'Profile workspace' }
+  ],
   locales: [
     { code: 'en-US', name: 'English (United States)' },
     { code: 'fr-FR', name: 'French (France)' },
@@ -23,7 +28,8 @@ const DEMO_PROJECT = {
 
 const DEMO_KEYS = [
   {
-    key: 'common.welcome',
+    pageKey: 'dashboard',
+    key: 'welcome',
     description: 'Main welcome message on homepage',
       translations: {
         'en-US': 'Welcome to our app!',
@@ -33,7 +39,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'common.logout',
+    pageKey: 'dashboard',
+    key: 'logout',
     description: 'Logout button text',
       translations: {
         'en-US': 'Log Out',
@@ -43,7 +50,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'nav.home',
+    pageKey: 'dashboard',
+    key: 'home',
     description: 'Navigation home link',
       translations: {
         'en-US': 'Home',
@@ -53,7 +61,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'nav.settings',
+    pageKey: 'dashboard',
+    key: 'settings',
     description: 'Navigation settings link',
       translations: {
         'en-US': 'Settings',
@@ -63,7 +72,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'auth.login.title',
+    pageKey: 'auth',
+    key: 'login_title',
     description: 'Login page heading',
       translations: {
         'en-US': 'Sign In',
@@ -73,7 +83,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'auth.login.email',
+    pageKey: 'auth',
+    key: 'login_email',
     description: 'Email input label',
       translations: {
         'en-US': 'Email Address',
@@ -83,7 +94,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'auth.login.password',
+    pageKey: 'auth',
+    key: 'login_password',
     description: 'Password input label',
       translations: {
         'en-US': 'Password',
@@ -92,7 +104,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'errors.notFound',
+    pageKey: 'dashboard',
+    key: 'not_found',
     description: '404 page message',
       translations: {
         'en-US': 'Page not found',
@@ -102,7 +115,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'errors.generic',
+    pageKey: 'dashboard',
+    key: 'generic_error',
     description: 'Generic error message',
       translations: {
         'en-US': 'Something went wrong. Please try again.',
@@ -110,7 +124,8 @@ const DEMO_KEYS = [
       }
   },
   {
-    key: 'profile.title',
+    pageKey: 'profile',
+    key: 'title',
     description: 'Profile page heading',
       translations: {
         'en-US': 'My Profile'
@@ -152,9 +167,12 @@ async function seed() {
 
     // Create translation keys
     for (const keyData of DEMO_KEYS) {
+      const page = project.pages.find((entry) => entry.pageKey === keyData.pageKey);
       await TranslationKey.create({
         projectId: project._id,
+        pageId: page._id,
         key: keyData.key,
+        fullKey: `${keyData.pageKey}.${keyData.key}`,
         description: keyData.description,
         translations: keyData.translations
       });
@@ -163,7 +181,7 @@ async function seed() {
     console.log(`Created ${DEMO_KEYS.length} translation keys`);
     console.log('\nDone! Start the server with: npm start');
     console.log(`Then visit: http://localhost:3000`);
-    console.log(`\nPublic API: curl -H "X-API-Key: ${project.apiKey}" http://localhost:3000/api/v1/translations/en-US`);
+    console.log(`\nPublic API: curl -H "X-API-Key: ${project.apiKey}" http://localhost:3000/api/v1/pages/dashboard/translations/en-US`);
 
     await mongoose.disconnect();
   } catch (error) {

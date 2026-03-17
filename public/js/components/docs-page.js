@@ -16,37 +16,39 @@ const DOCS_HTML = `
       <li><strong>Target Locales</strong> - Each language gets a code + name (e.g. code: <code>fa</code>, name: <code>Persian</code>)</li>
     </ul>
     <p>Locale codes can use any format you prefer: <code>en</code>, <code>en-US</code>, <code>en-UK</code>, <code>fr</code>, <code>fa</code>, etc. Each project gets its own <strong>API Key</strong> for client app integration.</p>
-    <h3>2. Add Translation Keys</h3>
-    <p>Translation keys are identifiers your app uses to reference specific text. We recommend <strong>dot notation</strong> for organization:</p>
-    <pre><code>common.welcome       = "Welcome to our app!"
-nav.home             = "Home"
-nav.settings         = "Settings"
-auth.login.title     = "Sign In"
-auth.login.email     = "Email Address"
-errors.notFound      = "Page not found"</code></pre>
-    <p>You can add keys one at a time via <strong>"+ Add Key"</strong>, or import many at once with <strong>"Bulk Import"</strong> by pasting a JSON object:</p>
+    <h3>2. Create Pages and Add Translation Keys</h3>
+    <p>Each project can contain multiple pages. Every page has a required <strong>page key</strong> like <code>dashboard</code> or <code>auth</code>. Inside that page, you create short local keys such as <code>greet</code> or <code>title</code>. TranslateHub stores the full key automatically:</p>
+    <pre><code>dashboard.greet       = "Welcome to our app!"
+dashboard.home        = "Home"
+dashboard.settings    = "Settings"
+auth.login_title      = "Sign In"
+auth.login_email      = "Email Address"
+dashboard.not_found   = "Page not found"</code></pre>
+    <p>You can add keys one at a time via <strong>"+ Add Key"</strong>, or import many at once with <strong>"Bulk Import"</strong> by pasting a page-local JSON object:</p>
     <pre><code>{
-  "common.welcome": "Welcome to our app!",
-  "nav.home": "Home",
-  "nav.settings": "Settings"
+  "greet": "Welcome to our app!",
+  "home": "Home",
+  "settings": "Settings"
 }</code></pre>
+    <p>TranslateHub adds the current page prefix automatically and blocks duplicate local keys inside the same page.</p>
     <h3>3. Translate</h3>
-    <p>On the project detail page, use the <strong>locale selector</strong> dropdown to switch between languages. Click into any translation cell to type the translated text. Changes save automatically when you leave the field.</p>
-    <p>The <strong>Translation Progress</strong> section shows completion percentage for each locale.</p>
+    <p>On the project detail page, choose a page first, then use the <strong>locale selector</strong> dropdown to switch between languages. Click into any translation cell to type the translated text. Changes save automatically when you leave the field.</p>
+    <p>The <strong>Translation Progress</strong> section shows completion percentage for each locale across the whole project.</p>
     <h2>Integrating with Your Application</h2>
     <h3>Getting Your API Key</h3>
     <p>Open your project, click <strong>"API Key"</strong>, and copy the key. It looks like: <code>th_a1b2c3d4e5...</code></p>
     <div class="docs-callout info"><strong>Important:</strong> The API key identifies your project. Keep it in environment variables, not in source code.</div>
     <h3>REST API Endpoints</h3>
     <p>All public endpoints require the <code>X-API-Key</code> header.</p>
-    <h3>Fetch translations for a single locale</h3>
-    <pre><code>GET /api/v1/translations/:localeCode
+    <h3>Fetch translations for a single page and locale</h3>
+    <pre><code>GET /api/v1/pages/:pageKey/translations/:localeCode
 
-GET /api/v1/translations/fr
+GET /api/v1/pages/dashboard/translations/fr
 Headers: { "X-API-Key": "th_your_key_here" }</code></pre>
     <h3>Best Practices</h3>
     <ul>
-      <li><strong>Use dot notation</strong> for keys</li>
+      <li><strong>Use clear page keys</strong> such as <code>dashboard</code> or <code>settings</code></li>
+      <li><strong>Keep local keys short</strong> because the page prefix is added automatically</li>
       <li><strong>Add descriptions</strong> for translator context</li>
       <li><strong>Cache translations</strong> on the client side</li>
       <li><strong>Use fallback logic</strong> to source locale</li>

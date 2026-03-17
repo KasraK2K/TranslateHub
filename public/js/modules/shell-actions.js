@@ -10,6 +10,9 @@
       if (this.currentProjectId) localStorage.setItem('th_current_project_id', this.currentProjectId);
       else localStorage.removeItem('th_current_project_id');
 
+      if (this.currentProjectPageId) localStorage.setItem('th_current_project_page_id', this.currentProjectPageId);
+      else localStorage.removeItem('th_current_project_page_id');
+
       if (this.currentLocale) localStorage.setItem('th_current_locale', this.currentLocale);
       else localStorage.removeItem('th_current_locale');
 
@@ -154,7 +157,8 @@
           break;
         case 'project':
           if (route.locale) this.currentLocale = route.locale;
-          this.showProject(route.projectId, { skipRoute: true });
+          this.currentProjectPageId = route.pageId || null;
+          this.showProject(route.projectId, { skipRoute: true, pageId: route.pageId || this.currentProjectPageId });
           break;
         default:
           this.navigate('projects', { skipRoute: true });
@@ -181,7 +185,7 @@
       }
 
       if (this.currentProjectId && this.currentPage === 'projects') {
-        this.updateRoute({ page: 'project', projectId: this.currentProjectId, locale: this.currentLocale }, true);
+        this.updateRoute({ page: 'project', projectId: this.currentProjectId, pageId: this.currentProjectPageId, locale: this.currentLocale }, true);
       } else {
         this.updateRoute({ page: this.currentPage || 'projects' }, true);
       }
@@ -211,6 +215,7 @@
         projects: this.projects,
         currentPage: this.currentPage,
         currentProjectId: this.currentProjectId,
+        currentProjectPageId: this.currentProjectPageId,
         filter: this.sidebarProjectFilter,
         isSuperAdmin: this.user.role === 'super_admin',
         onFilter: (value) => this.filterSidebarProjects(value)
@@ -228,6 +233,8 @@
       this.currentPage = page;
       this.currentProject = null;
       this.currentProjectId = null;
+      this.currentProjectPageId = null;
+      this.currentProjectPage = null;
       if (page !== 'projects') this.currentLocale = null;
       this.saveViewState();
       this.renderSidebar();

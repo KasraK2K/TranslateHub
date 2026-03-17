@@ -2,6 +2,7 @@ import { h, render } from '/vendor/preact/dist/preact.module.js';
 import htm from '/vendor/htm/dist/htm.module.js';
 
 const html = htm.bind(h);
+const Helpers = window.TranslateHubHelpers;
 
 function ModalFrame({ title, icon, body, footer, tone }) {
   return html`
@@ -80,13 +81,15 @@ function CreateProjectModal({ modalState }) {
 }
 
 function AddKeyModal({ modalState }) {
+  const fullKeyPreview = Helpers.buildFullKey(modalState.pageKey, modalState.key || '');
   return html`
     <${ModalFrame}
       title="Add Translation Key"
       body=${html`
-        <div class="form-group"><label>Key</label><input type="text" id="newKey" placeholder="e.g. welcome.title" autoFocus /><div class="form-hint">Use dot notation (e.g. nav.home, auth.login)</div></div>
-        <div class="form-group"><label>Description (optional)</label><input type="text" id="newKeyDesc" placeholder="Context for translators" /></div>
-        <div class="form-group"><label>Source text (${modalState.sourceName})</label><textarea id="newKeyValue" placeholder="Enter the source text" rows="2"></textarea></div>
+        <div class="form-group"><label>Key</label><input type="text" id="newKey" placeholder="e.g. greet" value=${modalState.key || ''} autoFocus onInput=${(event) => window.app.updateModalField('key', event.currentTarget.value)} /><div class="form-hint">Enter the page-local key only. The page prefix is added automatically.</div></div>
+        <div class="form-group"><label>Full Key Preview</label><div class="api-key-box"><code>${fullKeyPreview || `${modalState.pageKey}.your_key`}</code></div></div>
+        <div class="form-group"><label>Description (optional)</label><input type="text" id="newKeyDesc" value=${modalState.description || ''} placeholder="Context for translators" onInput=${(event) => window.app.updateModalField('description', event.currentTarget.value)} /></div>
+        <div class="form-group"><label>Source text (${modalState.sourceName})</label><textarea id="newKeyValue" placeholder="Enter the source text" rows="2" onInput=${(event) => window.app.updateModalField('sourceValue', event.currentTarget.value)}>${modalState.sourceValue || ''}</textarea></div>
       `}
       footer=${html`
         <button class="btn" type="button" onClick=${() => window.app.closeModal()}>Cancel</button>
@@ -103,8 +106,8 @@ function BulkAddModal({ modalState }) {
       body=${html`
         <div class="form-group">
           <label>Paste JSON (${modalState.sourceName})</label>
-          <textarea id="bulkJson" rows="10" placeholder='{"welcome.title":"Welcome"}'></textarea>
-          <div class="form-hint">Flat key-value JSON object.</div>
+          <textarea id="bulkJson" rows="10" placeholder='{"greet":"Welcome"}'></textarea>
+          <div class="form-hint">Flat page-local key/value object. Keys will be stored with the <code>${modalState.pageKey}</code> prefix automatically.</div>
         </div>
       `}
       footer=${html`
@@ -117,6 +120,7 @@ function BulkAddModal({ modalState }) {
 
 function ApiKeyModal() {
   const p = window.app.currentProject;
+  const currentPage = window.app.currentProjectPage || (p.pages || [])[0];
   return html`
     <${ModalFrame} title="API Key" icon="fa-key" body=${html`
       <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">Use this API key in your client app to fetch translations at runtime.</p>
@@ -126,7 +130,7 @@ function ApiKeyModal() {
       </div>
       <div style="margin-top:20px;padding:16px;background:var(--gray-50);border-radius:6px;font-size:13px">
         <strong>Usage Example:</strong>
-        <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all"><code>${`fetch('${window.location.origin}/api/v1/translations/${p.sourceLocale}', {
+        <pre style="margin-top:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all"><code>${`fetch('${window.location.origin}/api/v1/pages/${currentPage ? currentPage.pageKey : 'dashboard'}/translations/${p.sourceLocale}', {
   headers: { 'X-API-Key': '${p.apiKey}' }
 })
 .then(res => res.json())
@@ -182,6 +186,60 @@ function ProjectSettingsModal({ modalState }) {
       footer=${html`
         <button class="btn" type="button" onClick=${() => window.app.closeModal()}>Cancel</button>
         <button class="btn btn-primary" type="button" onClick=${() => window.app.updateProject()}>Save</button>
+      `}
+    />
+  `;
+}
+
+function CreatePageModal({ modalState }) {
+  return html`
+    <${ModalFrame}
+      title="New Page"
+      icon="fa-file-lines"
+      body=${html`
+        <div class="form-group"><label>Page Name</label><input type="text" value=${modalState.name || ''} placeholder="Dashboard" autoFocus onInput=${(event) => window.app.updateModalField('name', event.currentTarget.value)} /></div>
+        <div class="form-group"><label>Page Key</label><input type="text" value=${modalState.pageKey || ''} placeholder="dashboard" onInput=${(event) => window.app.updateModalField('pageKey', event.currentTarget.value)} /><div class="form-hint">Used as the prefix for all keys in this page, for example <code>dashboard.greet</code>.</div></div>
+        <div class="form-group"><label>Description</label><textarea rows="2" onInput=${(event) => window.app.updateModalField('description', event.currentTarget.value)}>${modalState.description || ''}</textarea></div>
+      `}
+      footer=${html`
+        <button class="btn" type="button" onClick=${() => window.app.closeModal()}>Cancel</button>
+        <button class="btn btn-primary" type="button" onClick=${() => window.app.createPage()}>Create Page</button>
+      `}
+    />
+  `;
+}
+
+function EditPageModal({ modalState }) {
+  return html`
+    <${ModalFrame}
+      title="Edit Page"
+      icon="fa-pen"
+      body=${html`
+        <div class="form-group"><label>Page Name</label><input type="text" value=${modalState.name || ''} autoFocus onInput=${(event) => window.app.updateModalField('name', event.currentTarget.value)} /></div>
+        <div class="form-group"><label>Page Key</label><input type="text" value=${modalState.pageKey || ''} onInput=${(event) => window.app.updateModalField('pageKey', event.currentTarget.value)} /><div class="form-hint">If this page already has keys, changing the page key is blocked to avoid breaking stored full keys.</div></div>
+        <div class="form-group"><label>Description</label><textarea rows="2" onInput=${(event) => window.app.updateModalField('description', event.currentTarget.value)}>${modalState.description || ''}</textarea></div>
+      `}
+      footer=${html`
+        <button class="btn" type="button" onClick=${() => window.app.closeModal()}>Cancel</button>
+        <button class="btn btn-primary" type="button" onClick=${() => window.app.updatePage()}>Save</button>
+      `}
+    />
+  `;
+}
+
+function DeletePageModal({ modalState }) {
+  return html`
+    <${ModalFrame}
+      title="Delete Page"
+      icon="fa-triangle-exclamation"
+      tone="destructive"
+      body=${html`
+        <p style="font-size:14px;color:var(--gray-600);margin-bottom:12px">Delete <strong>${modalState.pageName}</strong>. If it still has translation keys, you can choose force delete to remove the page and all its keys.</p>
+      `}
+      footer=${html`
+        <button class="btn" type="button" onClick=${() => window.app.closeModal()}>Cancel</button>
+        <button class="btn btn-danger" type="button" onClick=${() => window.app.submitDeletePage(false)}>Delete Empty Page</button>
+        <button class="btn btn-danger" type="button" onClick=${() => window.app.submitDeletePage(true)}>Force Delete</button>
       `}
     />
   `;
@@ -247,6 +305,9 @@ function ModalContent({ modalState }) {
   if (!modalState) return html``;
   switch (modalState.type) {
     case 'create-project': return html`<${CreateProjectModal} modalState=${modalState} />`;
+    case 'create-page': return html`<${CreatePageModal} modalState=${modalState} />`;
+    case 'edit-page': return html`<${EditPageModal} modalState=${modalState} />`;
+    case 'delete-page': return html`<${DeletePageModal} modalState=${modalState} />`;
     case 'add-key': return html`<${AddKeyModal} modalState=${modalState} />`;
     case 'bulk-add': return html`<${BulkAddModal} modalState=${modalState} />`;
     case 'api-key': return html`<${ApiKeyModal} />`;

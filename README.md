@@ -37,7 +37,8 @@ It includes a browser-based admin dashboard, per-project locale management, runt
 
 - Manage translation projects with custom locale codes like `en`, `en-US`, `fr-FR`, or `zh-Hans`
 - Store locale metadata as `{ code, name }` for cleaner UI and API responses
-- Create, edit, bulk import, and delete translation keys
+- Create pages inside each project, then create page-local keys with automatic prefixed full keys like `dashboard.greet`
+- Create, edit, bulk import, and delete translation keys inside each page
 - Runtime translation delivery through API key-protected public endpoints
 - Source-locale fallback when a translation is missing
 - Per-project password protection
@@ -78,9 +79,10 @@ Typical flow:
 
 1. Create a project
 2. Add source and target locales
-3. Add translation keys and values
-4. Copy the project API key
-5. Fetch translations in your application at runtime
+3. Create one or more pages like `dashboard` or `settings`
+4. Add page-local translation keys and values
+5. Copy the project API key
+6. Fetch translations for a specific page at runtime
 
 ## Getting Started
 
@@ -192,6 +194,7 @@ npm run seed
 This creates:
 
 - a demo project
+- sample pages
 - sample locale data
 - sample translation keys
 - an initial super admin if needed
@@ -259,12 +262,16 @@ Translation key management:
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/:projectId/keys` | List translation keys |
-| `POST` | `/:projectId/keys` | Create one key |
-| `POST` | `/:projectId/keys/bulk` | Bulk import keys |
-| `PUT` | `/:projectId/keys/:keyId` | Update a key |
-| `PATCH` | `/:projectId/keys/:keyId/translate` | Update one locale value |
-| `DELETE` | `/:projectId/keys/:keyId` | Delete a key |
+| `GET` | `/:projectId/pages` | List project pages |
+| `POST` | `/:projectId/pages` | Create one page |
+| `PUT` | `/:projectId/pages/:pageId` | Update one page |
+| `DELETE` | `/:projectId/pages/:pageId` | Delete one page |
+| `GET` | `/:projectId/pages/:pageId/keys` | List page translation keys |
+| `POST` | `/:projectId/pages/:pageId/keys` | Create one page-local key |
+| `POST` | `/:projectId/pages/:pageId/keys/bulk` | Bulk import page-local keys |
+| `PUT` | `/:projectId/pages/:pageId/keys/:keyId` | Update a key |
+| `PATCH` | `/:projectId/pages/:pageId/keys/:keyId/translate` | Update one locale value |
+| `DELETE` | `/:projectId/pages/:pageId/keys/:keyId` | Delete a key |
 
 ### Public Translation API
 
@@ -274,15 +281,16 @@ Requires the `X-API-Key` header.
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/translations/:locale` | Get translations for a single locale |
-| `GET` | `/translations` | Get translations for all locales |
+| `GET` | `/pages` | Get project pages |
+| `GET` | `/pages/:pageKey/translations/:locale` | Get one page for one locale |
+| `GET` | `/pages/:pageKey/translations` | Get one page for all locales |
 | `GET` | `/locales` | Get project locale metadata |
 
 Example:
 
 ```bash
 curl -H "X-API-Key: th_your_project_api_key" \
-  http://localhost:3000/api/v1/translations/en-US
+  http://localhost:3000/api/v1/pages/dashboard/translations/en-US
 ```
 
 Example response:
@@ -292,12 +300,20 @@ Example response:
   "locale": "en-US",
   "localeName": "English (United States)",
   "projectId": "...",
+  "pageKey": "dashboard",
   "translations": {
-    "common.welcome": "Welcome to our app!",
-    "nav.home": "Home"
+    "welcome": "Welcome to our app!",
+    "home": "Home"
   }
 }
 ```
+
+Notes:
+
+- each page has a required `pageKey` like `dashboard`
+- users create local keys like `greet`, and the system stores the full key as `dashboard.greet`
+- duplicate local keys are blocked within the same page
+- changing a `pageKey` is blocked after that page already contains translation keys
 
 ## Project Security Model
 

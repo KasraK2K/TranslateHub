@@ -64,6 +64,27 @@ function normalizeLocales(locales, sourceLocale) {
   return Array.from(uniqueLocales.values());
 }
 
+function normalizePageKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePageName(value) {
+  return String(value || '').trim();
+}
+
+function isValidPageKey(value) {
+  return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(value);
+}
+
+function normalizePages(pages) {
+  return (Array.isArray(pages) ? pages : []).map((page) => ({
+    ...page,
+    name: normalizePageName(page && page.name),
+    pageKey: normalizePageKey(page && page.pageKey),
+    description: String(page && page.description || '').trim()
+  })).filter((page) => page.name || page.pageKey || page.description);
+}
+
 const localeSchema = new mongoose.Schema({
   code: {
     type: String,
@@ -76,6 +97,31 @@ const localeSchema = new mongoose.Schema({
     trim: true
   }
 }, { _id: false });
+
+const pageSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Page name is required'],
+    trim: true,
+    maxlength: 100
+  },
+  pageKey: {
+    type: String,
+    required: [true, 'Page key is required'],
+    trim: true,
+    lowercase: true,
+    maxlength: 100,
+    validate: {
+      validator: isValidPageKey,
+      message: 'Page key may contain only lowercase letters, numbers, hyphens, and underscores'
+    }
+  },
+  description: {
+    type: String,
+    default: '',
+    maxlength: 500
+  }
+}, { _id: true });
 
 const projectSchema = new mongoose.Schema({
   name: {
@@ -111,6 +157,10 @@ const projectSchema = new mongoose.Schema({
     type: [localeSchema],
     default: []
   },
+  pages: {
+    type: [pageSchema],
+    default: []
+  },
   projectPassword: {
     type: String,
     required: [true, 'Project password is required'],
@@ -129,6 +179,32 @@ const projectSchema = new mongoose.Schema({
 projectSchema.pre('validate', function (next) {
   this.sourceLocale = String(this.sourceLocale || 'en').trim() || 'en';
   this.locales = normalizeLocales(this.locales, this.sourceLocale);
+  this.pages = normalizePages(this.pages);
+
+  const pageKeys = new Set();
+  for (const page of this.pages) {
+    if (!page.name) {
+      this.invalidate('pages', 'Page name is required');
+      continue;
+    }
+
+    if (!page.pageKey) {
+      this.invalidate('pages', 'Page key is required');
+      continue;
+    }
+
+    if (!isValidPageKey(page.pageKey)) {
+      this.invalidate('pages', 'Page key may contain only lowercase letters, numbers, hyphens, and underscores');
+      continue;
+    }
+
+    if (pageKeys.has(page.pageKey)) {
+      this.invalidate('pages', `Page key '${page.pageKey}' is duplicated`);
+      continue;
+    }
+
+    pageKeys.add(page.pageKey);
+  }
 
   if (this.isModified('name') && !this.slug) {
     this.slug = this.name
@@ -158,6 +234,22 @@ projectSchema.methods.getLocaleName = function (code) {
 
 projectSchema.methods.compareProjectPassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.projectPassword);
+};
+
+projectSchema.methods.getPageById = function (pageId) {
+  const target = String(pageId || '');
+  return this.pages.find((page) => String(page._id) === target) || null;
+};
+
+projectSchema.methods.getPageByKey = function (pageKey) {
+  const target = normalizePageKey(pageKey);
+  return this.pages.find((page) => page.pageKey === target) || null;
+};
+
+projectSchema.methods.hasPageKey = function (pageKey, excludePageId) {
+  const target = normalizePageKey(pageKey);
+  const excluded = String(excludePageId || '');
+  return this.pages.some((page) => page.pageKey === target && String(page._id) !== excluded);
 };
 
 projectSchema.methods.toJSON = function () {

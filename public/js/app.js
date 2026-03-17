@@ -13,6 +13,8 @@ const app = {
   currentPage: localStorage.getItem('th_current_page') || 'projects',
   currentProject: null,
   currentProjectId: localStorage.getItem('th_current_project_id') || null,
+  currentProjectPageId: localStorage.getItem('th_current_project_page_id') || null,
+  currentProjectPage: null,
   currentLocale: localStorage.getItem('th_current_locale') || null,
   currentTheme: localStorage.getItem('th_theme') || 'aurora',
   isThemeMenuOpen: false,
@@ -30,11 +32,12 @@ const app = {
   store: Store.createStore({
     token: localStorage.getItem('th_token'),
     user: JSON.parse(localStorage.getItem('th_user') || 'null'),
-    currentPage: localStorage.getItem('th_current_page') || 'projects',
-    currentProjectId: localStorage.getItem('th_current_project_id') || null,
-    currentLocale: localStorage.getItem('th_current_locale') || null,
-    currentTheme: localStorage.getItem('th_theme') || 'aurora'
-  }),
+      currentPage: localStorage.getItem('th_current_page') || 'projects',
+      currentProjectId: localStorage.getItem('th_current_project_id') || null,
+      currentProjectPageId: localStorage.getItem('th_current_project_page_id') || null,
+      currentLocale: localStorage.getItem('th_current_locale') || null,
+      currentTheme: localStorage.getItem('th_theme') || 'aurora'
+    }),
 
   defaultLocaleName(code) {
     return Helpers.defaultLocaleName(code);
@@ -73,6 +76,18 @@ const app = {
     return this.getProjectLocales(project).map((locale) => locale.code);
   },
 
+  getProjectPages(project) {
+    return ((project || this.currentProject || {}).pages || []).map((page) => ({
+      ...page,
+      description: page.description || ''
+    }));
+  },
+
+  getCurrentProjectPage(project) {
+    const pages = this.getProjectPages(project);
+    return pages.find((page) => String(page._id) === String(this.currentProjectPageId || '')) || pages[0] || null;
+  },
+
   getLocaleName(code, project) {
     return Helpers.getLocaleName(code, project || this.currentProject || {});
   },
@@ -105,6 +120,7 @@ const app = {
       user: this.user,
       currentPage: this.currentPage,
       currentProjectId: this.currentProjectId,
+      currentProjectPageId: this.currentProjectPageId,
       currentLocale: this.currentLocale,
       currentTheme: this.currentTheme
     });

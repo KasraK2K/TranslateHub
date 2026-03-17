@@ -116,6 +116,28 @@
     return null;
   }
 
+  function normalizePageKey(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function isValidPageKey(value) {
+    return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(normalizePageKey(value));
+  }
+
+  function normalizeLocalKey(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function isValidLocalKey(value) {
+    return /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(normalizeLocalKey(value));
+  }
+
+  function buildFullKey(pageKey, key) {
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const normalizedKey = normalizeLocalKey(key);
+    return normalizedPageKey && normalizedKey ? `${normalizedPageKey}.${normalizedKey}` : '';
+  }
+
   return {
     defaultLocaleName,
     normalizeLocale,
@@ -124,6 +146,11 @@
     collectLocaleEntries,
     escapeHtml,
     validateRequired,
-    validateMinLength
+    validateMinLength,
+    normalizePageKey,
+    isValidPageKey,
+    normalizeLocalKey,
+    isValidLocalKey,
+    buildFullKey
   };
 });

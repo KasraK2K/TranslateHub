@@ -18,7 +18,7 @@ function Hero({ eyebrow, title, description, actionLabel, actionClick }) {
   `;
 }
 
-function ProjectCard({ project, locales, completion, keyCount, onOpen }) {
+function ProjectCard({ project, locales, completion, keyCount, pageCount, onOpen }) {
   return html`
     <button class="project-card" type="button" onClick=${onOpen}>
       <div class="project-card-topline">
@@ -30,6 +30,7 @@ function ProjectCard({ project, locales, completion, keyCount, onOpen }) {
       <div class="project-meta">
         <span><i class="fa-solid fa-language"></i> Source: <strong>${project.sourceLocale}</strong></span>
         <span><i class="fa-solid fa-earth-americas"></i> ${locales.length} locale${locales.length !== 1 ? 's' : ''}</span>
+        <span><i class="fa-solid fa-window-maximize"></i> ${pageCount} page${pageCount !== 1 ? 's' : ''}</span>
         <span><i class="fa-solid fa-file-lines"></i> ${keyCount} keys</span>
       </div>
       <div class="project-card-progress">
@@ -76,6 +77,7 @@ function ProjectsPage({ projects }) {
               const total = project.stats ? Object.values(project.stats).reduce((sum, item) => sum + (item.total || 0), 0) : 0;
               const completion = total ? Math.round((translated / total) * 100) : 0;
               const keyCount = (project.stats && Object.values(project.stats)[0] && Object.values(project.stats)[0].total) || 0;
+              const pageCount = ((project.pages || []).length) || 0;
 
               return html`<${ProjectCard}
                 key=${project._id}
@@ -83,6 +85,7 @@ function ProjectsPage({ projects }) {
                 locales=${locales}
                 completion=${completion}
                 keyCount=${keyCount}
+                pageCount=${pageCount}
                 onOpen=${() => window.app.showProject(project._id)}
               />`;
             })}

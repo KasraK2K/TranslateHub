@@ -3,7 +3,7 @@ import htm from '/vendor/htm/dist/htm.module.js';
 
 const html = htm.bind(h);
 
-function Sidebar({ projects, currentPage, currentProjectId, filter, isSuperAdmin, onFilter }) {
+function Sidebar({ projects, currentPage, currentProjectId, currentProjectPageId, filter, isSuperAdmin, onFilter }) {
   const filteredProjects = projects.filter((project) => project.name.toLowerCase().includes((filter || '').toLowerCase()));
 
   return html`
@@ -32,9 +32,22 @@ function Sidebar({ projects, currentPage, currentProjectId, filter, isSuperAdmin
       </div>
       ${filteredProjects.length
         ? filteredProjects.map((project) => html`
-            <button class=${`sidebar-item ${currentProjectId === project._id ? 'active' : ''}`} type="button" onClick=${() => window.app.showProject(project._id)}>
+            <button class=${`sidebar-item ${currentProjectId === project._id ? 'active' : ''}`} type="button" onClick=${() => window.app.showProject(project._id, { pageId: null })}>
               <i class=${`fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon`}></i> ${project.name}
             </button>
+            ${currentProjectId === project._id && (project.pages || []).length
+              ? html`
+                  <div class="sidebar-sublist">
+                    ${(project.pages || []).map((page) => html`
+                      <button class=${`sidebar-subitem ${currentProjectPageId === page._id ? 'active' : ''}`} type="button" onClick=${() => window.app.showProject(project._id, { pageId: page._id })}>
+                        <i class="fa-solid fa-file-lines icon"></i>
+                        <span>${page.name}</span>
+                        <code>${page.pageKey}</code>
+                      </button>
+                    `)}
+                  </div>
+                `
+              : ''}
           `)
         : html`<div class="sidebar-empty">No matching projects</div>`}
     </div>
