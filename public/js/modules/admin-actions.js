@@ -1,6 +1,7 @@
 (function (root) {
   const UI = root.TranslateHubUI;
   const Helpers = root.TranslateHubHelpers;
+  const Config = root.TranslateHubConfig;
 
   root.TranslateHubAdminActions = {
     async showAdmins() {
@@ -13,7 +14,7 @@
       }
       this.render(UI.renderLoadingState('Loading admin users'));
       try {
-        this.admins = await this.fetch('/api/admins');
+        this.admins = await this.fetch(Config.API_PATHS.admins);
       } catch (e) {
         this.render(UI.renderErrorState({
           title: 'Could not load admins',
@@ -52,7 +53,7 @@
       if (passwordError) return this.toast(passwordError, 'error');
 
       try {
-        await this.fetch('/api/admins', {
+        await this.fetch(Config.API_PATHS.admins, {
           method: 'POST',
           body: JSON.stringify({ username, password, displayName, role })
         });

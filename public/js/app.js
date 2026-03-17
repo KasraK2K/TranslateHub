@@ -1,4 +1,6 @@
 const Helpers = window.TranslateHubHelpers;
+const Config = window.TranslateHubConfig;
+const Store = window.TranslateHubStore;
 const ModalActions = window.TranslateHubModalActions;
 const AuthActions = window.TranslateHubAuthActions;
 const ProjectActions = window.TranslateHubProjectActions;
@@ -24,17 +26,15 @@ const app = {
   projects: [],
   keys: [],
   admins: [],
-  themes: [
-    { id: 'aurora', label: 'Aurora', icon: 'fa-sun', tone: 'Bright glass', mode: 'light' },
-    { id: 'ember', label: 'Ember', icon: 'fa-fire', tone: 'Warm editorial', mode: 'light' },
-    { id: 'ocean', label: 'Ocean', icon: 'fa-water', tone: 'Cool clarity', mode: 'light' },
-    { id: 'paper', label: 'Paper', icon: 'fa-feather-pointed', tone: 'Soft neutral', mode: 'light' },
-    { id: 'sunset', label: 'Sunset', icon: 'fa-mountain-sun', tone: 'Golden bloom', mode: 'light' },
-    { id: 'dusk', label: 'Dusk', icon: 'fa-cloud-moon', tone: 'Soft dark', mode: 'dark' },
-    { id: 'graphite', label: 'Graphite', icon: 'fa-meteor', tone: 'Industrial dark', mode: 'dark' },
-    { id: 'forest-night', label: 'Forest Night', icon: 'fa-leaf', tone: 'Deep green dark', mode: 'dark' },
-    { id: 'midnight-neon', label: 'Midnight Neon', icon: 'fa-bolt', tone: 'Electric dark', mode: 'dark' }
-  ],
+  themes: Config.THEMES,
+  store: Store.createStore({
+    token: localStorage.getItem('th_token'),
+    user: JSON.parse(localStorage.getItem('th_user') || 'null'),
+    currentPage: localStorage.getItem('th_current_page') || 'projects',
+    currentProjectId: localStorage.getItem('th_current_project_id') || null,
+    currentLocale: localStorage.getItem('th_current_locale') || null,
+    currentTheme: localStorage.getItem('th_theme') || 'aurora'
+  }),
 
   defaultLocaleName(code) {
     return Helpers.defaultLocaleName(code);
@@ -97,6 +97,17 @@ const app = {
 
   esc(str) {
     return Helpers.escapeHtml(str);
+  },
+
+  syncStore() {
+    this.store.assign({
+      token: this.token,
+      user: this.user,
+      currentPage: this.currentPage,
+      currentProjectId: this.currentProjectId,
+      currentLocale: this.currentLocale,
+      currentTheme: this.currentTheme
+    });
   },
 
   ...ModalActions,

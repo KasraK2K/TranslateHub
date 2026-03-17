@@ -1,6 +1,7 @@
 (function (root) {
   const Router = root.TranslateHubRouter;
   const CommandBar = root.TranslateHubCommandBar;
+  const Config = root.TranslateHubConfig;
 
   root.TranslateHubShellActions = {
     saveViewState() {
@@ -11,6 +12,8 @@
 
       if (this.currentLocale) localStorage.setItem('th_current_locale', this.currentLocale);
       else localStorage.removeItem('th_current_locale');
+
+      this.syncStore();
     },
 
     setTheme(themeId) {
@@ -20,6 +23,7 @@
       localStorage.setItem('th_theme', selectedTheme);
       document.documentElement.setAttribute('data-theme', selectedTheme);
       document.body.setAttribute('data-theme', selectedTheme);
+      this.syncStore();
       this.isThemeMenuOpen = false;
       this.renderThemeSwitcher();
     },
@@ -196,7 +200,7 @@
 
     async refreshProjectsCache() {
       try {
-        this.projects = await this.fetch('/api/projects');
+        this.projects = await this.fetch(Config.API_PATHS.projects);
         this.renderSidebar();
       } catch (e) {}
     },
@@ -284,8 +288,9 @@
 
       if (this.token) {
         try {
-          const data = await this.fetch('/api/auth/me');
+          const data = await this.fetch(Config.API_PATHS.authMe);
           this.user = data.user;
+          this.syncStore();
           localStorage.setItem('th_user', JSON.stringify(data.user));
           this.showDashboard();
         } catch (e) {

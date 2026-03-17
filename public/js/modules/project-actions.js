@@ -1,6 +1,7 @@
 (function (root) {
   const UI = root.TranslateHubUI;
   const Helpers = root.TranslateHubHelpers;
+  const Config = root.TranslateHubConfig;
 
   root.TranslateHubProjectActions = {
     async showProjects() {
@@ -10,7 +11,7 @@
       this.saveViewState();
       this.render(UI.renderLoadingState('Loading projects'));
       try {
-        this.projects = await this.fetch('/api/projects');
+        this.projects = await this.fetch(Config.API_PATHS.projects);
       } catch (e) {
         this.render(UI.renderErrorState({
           title: 'Could not load projects',
@@ -56,7 +57,7 @@
       if (!locales) return;
 
       try {
-        const project = await this.fetch('/api/projects', {
+        const project = await this.fetch(Config.API_PATHS.projects, {
           method: 'POST',
           body: JSON.stringify({ name, description, sourceLocale: sourceCode, locales, projectPassword })
         });

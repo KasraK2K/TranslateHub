@@ -1,5 +1,6 @@
 (function (root) {
   const Helpers = root.TranslateHubHelpers;
+  const Config = root.TranslateHubConfig;
 
   root.TranslateHubAuthActions = {
     setAuthError(message) {
@@ -12,6 +13,7 @@
     setAuth(token, user) {
       this.token = token;
       this.user = user;
+      this.syncStore();
       localStorage.setItem('th_token', token);
       localStorage.setItem('th_user', JSON.stringify(user));
     },
@@ -22,6 +24,7 @@
       localStorage.removeItem('th_token');
       localStorage.removeItem('th_user');
       this.currentProject = null;
+      this.syncStore();
       this.showAuthScreen();
     },
 
@@ -30,7 +33,7 @@
       document.getElementById('authScreen').style.display = 'block';
 
       try {
-        const status = await fetch('/api/auth/status').then((r) => r.json());
+        const status = await fetch(Config.API_PATHS.authStatus).then((r) => r.json());
         document.getElementById('authScreen').innerHTML = '';
         root.TranslateHubPreact.renderAuthScreen(document.getElementById('authScreen'), {
           needsSetup: !!status.needsSetup,
@@ -60,7 +63,7 @@
 
       try {
         this.setAuthError('');
-        const data = await fetch('/api/auth/login', {
+        const data = await fetch(Config.API_PATHS.authLogin, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
@@ -99,7 +102,7 @@
 
       try {
         this.setAuthError('');
-        const data = await fetch('/api/auth/setup', {
+        const data = await fetch(Config.API_PATHS.authSetup, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password, displayName })
