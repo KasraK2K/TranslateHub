@@ -2,6 +2,8 @@ const API = '/api';
 const Helpers = window.TranslateHubHelpers;
 const Router = window.TranslateHubRouter;
 const UI = window.TranslateHubUI;
+const CommandBar = window.TranslateHubCommandBar;
+const A11y = window.TranslateHubAccessibility;
 
 const app = {
   token: localStorage.getItem('th_token'),
@@ -14,6 +16,9 @@ const app = {
   isThemeMenuOpen: false,
   isCommandBarOpen: false,
   sidebarProjectFilter: '',
+  commandItems: [],
+  activeCommandIndex: 0,
+  lastFocusedElement: null,
   projects: [],
   keys: [],
   admins: [],
@@ -87,13 +92,19 @@ const app = {
 
   // ==================== Modal ====================
   openModal(html) {
+    this.lastFocusedElement = document.activeElement;
     document.getElementById('modalContent').innerHTML = html;
     document.getElementById('modalOverlay').classList.add('active');
+    setTimeout(() => A11y.focusFirst(document.getElementById('modalContent')), 0);
   },
 
   closeModal(e) {
     if (e && e.target !== e.currentTarget) return;
     document.getElementById('modalOverlay').classList.remove('active');
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+      this.lastFocusedElement = null;
+    }
   },
 
   // ==================== Auth ====================
@@ -154,10 +165,12 @@ const app = {
   },
 
   openCommandBar() {
+    this.lastFocusedElement = document.activeElement;
     this.isCommandBarOpen = true;
     const overlay = document.getElementById('commandOverlay');
     if (!overlay) return;
     overlay.classList.add('active');
+    this.activeCommandIndex = 0;
     this.renderCommandResults('');
     const input = document.getElementById('commandInput');
     if (input) {
@@ -171,51 +184,27 @@ const app = {
     this.isCommandBarOpen = false;
     const overlay = document.getElementById('commandOverlay');
     if (overlay) overlay.classList.remove('active');
+    if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
+      this.lastFocusedElement.focus();
+      this.lastFocusedElement = null;
+    }
   },
 
   getCommandItems() {
-    const items = [
-      { label: 'Go to Projects', hint: 'View all projects', icon: 'fa-folder', action: "app.navigate('projects')" },
-      { label: 'Go to Documentation', hint: 'Open docs and API reference', icon: 'fa-book', action: "app.navigate('docs')" },
-      { label: 'Create Project', hint: 'Open the new project modal', icon: 'fa-plus', action: 'app.showCreateProjectModal()' }
-    ];
-
-    if (this.user && this.user.role === 'super_admin') {
-      items.splice(1, 0, { label: 'Go to Admins', hint: 'Manage dashboard access', icon: 'fa-users', action: "app.navigate('admins')" });
-    }
-
-    if (this.currentProject) {
-      items.push(
-        { label: 'Project Settings', hint: this.currentProject.name, icon: 'fa-gear', action: 'app.showProjectSettingsModal()' },
-        { label: 'Show API Key', hint: this.currentProject.name, icon: 'fa-key', action: 'app.showApiKeyModal()' }
-      );
-    }
-
-    this.projects.forEach((project) => {
-      items.push({
-        label: project.name,
-        hint: `${project.isLocked ? 'Locked' : 'Unlocked'} project`,
-        icon: project.isLocked ? 'fa-lock' : 'fa-language',
-        action: `app.showProject('${project._id}')`
-      });
-    });
-
-    return items;
+    return CommandBar.getItems(this);
   },
 
   renderCommandResults(query) {
     const container = document.getElementById('commandResults');
     if (!container) return;
 
-    const normalizedQuery = String(query || '').trim().toLowerCase();
-    const items = this.getCommandItems().filter((item) => {
-      if (!normalizedQuery) return true;
-      return `${item.label} ${item.hint}`.toLowerCase().includes(normalizedQuery);
-    });
+    const items = CommandBar.filterItems(this.getCommandItems(), query);
+    this.commandItems = items;
+    if (this.activeCommandIndex >= items.length) this.activeCommandIndex = 0;
 
     container.innerHTML = items.length
-      ? items.map((item) => `
-          <button class="command-item" type="button" onclick="${item.action}; app.closeCommandBar();">
+      ? items.map((item, index) => `
+          <button class="command-item ${index === this.activeCommandIndex ? 'active' : ''}" type="button" role="option" aria-selected="${index === this.activeCommandIndex}" onclick="app.executeCommandItem(${index})">
             <span class="command-item-icon"><i class="fa-solid ${item.icon}"></i></span>
             <span class="command-item-copy">
               <strong>${this.esc(item.label)}</strong>
@@ -224,6 +213,40 @@ const app = {
           </button>
         `).join('')
       : '<div class="command-empty"><i class="fa-solid fa-compass"></i><strong>No matches</strong><span>Try a project name, page, or action.</span></div>';
+  },
+
+  executeCommandItem(index) {
+    const item = this.commandItems[index];
+    if (!item) return;
+    item.run();
+    this.closeCommandBar();
+  },
+
+  moveCommandSelection(direction) {
+    if (!this.commandItems.length) return;
+    this.activeCommandIndex = (this.activeCommandIndex + direction + this.commandItems.length) % this.commandItems.length;
+    this.renderCommandResults(document.getElementById('commandInput').value);
+    const activeButton = document.querySelector('.command-item.active');
+    if (activeButton) activeButton.scrollIntoView({ block: 'nearest' });
+  },
+
+  handleCommandInputKeydown(event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.moveCommandSelection(1);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.moveCommandSelection(-1);
+      return;
+    }
+
+    if (event.key === 'Enter' && this.commandItems.length) {
+      event.preventDefault();
+      this.executeCommandItem(this.activeCommandIndex);
+    }
   },
 
   toggleSidebar() {
@@ -1770,6 +1793,15 @@ def t(key, locale="en"):
 
       if (event.key === 'Escape') {
         this.closeCommandBar();
+        this.closeModal();
+      }
+
+      if (document.getElementById('modalOverlay').classList.contains('active')) {
+        A11y.trapFocus(document.getElementById('modalContent'), event);
+      }
+
+      if (document.getElementById('commandOverlay').classList.contains('active')) {
+        A11y.trapFocus(document.getElementById('commandBar') || document.querySelector('.command-bar'), event);
       }
     });
 
