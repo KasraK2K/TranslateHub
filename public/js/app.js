@@ -196,23 +196,17 @@ const app = {
 
   renderCommandResults(query) {
     const container = document.getElementById('commandResults');
-    if (!container) return;
+    if (!container || !window.TranslateHubPreact) return;
 
     const items = CommandBar.filterItems(this.getCommandItems(), query);
     this.commandItems = items;
     if (this.activeCommandIndex >= items.length) this.activeCommandIndex = 0;
 
-    container.innerHTML = items.length
-      ? items.map((item, index) => `
-          <button class="command-item ${index === this.activeCommandIndex ? 'active' : ''}" type="button" role="option" aria-selected="${index === this.activeCommandIndex}" onclick="app.executeCommandItem(${index})">
-            <span class="command-item-icon"><i class="fa-solid ${item.icon}"></i></span>
-            <span class="command-item-copy">
-              <strong>${this.esc(item.label)}</strong>
-              <small>${this.esc(item.hint)}</small>
-            </span>
-          </button>
-        `).join('')
-      : '<div class="command-empty"><i class="fa-solid fa-compass"></i><strong>No matches</strong><span>Try a project name, page, or action.</span></div>';
+    window.TranslateHubPreact.renderCommandBar(container, {
+      items,
+      activeIndex: this.activeCommandIndex,
+      onSelect: (index) => this.executeCommandItem(index)
+    });
   },
 
   executeCommandItem(index) {
@@ -301,66 +295,15 @@ const app = {
 
   renderThemeSwitcher() {
     const container = document.getElementById('themeSwitcher');
-    if (!container) return;
+    if (!container || !window.TranslateHubPreact) return;
 
-    const activeTheme = this.themes.find((theme) => theme.id === this.currentTheme) || this.themes[0];
-    const lightThemes = this.themes.filter((theme) => theme.mode !== 'dark');
-    const darkThemes = this.themes.filter((theme) => theme.mode === 'dark');
-
-    container.innerHTML = `
-      <div class="theme-studio ${this.isThemeMenuOpen ? 'open' : ''}" onclick="event.stopPropagation()">
-        <button class="theme-studio-trigger" type="button" onclick="app.toggleThemeMenu(event)">
-          <span class="theme-studio-badge theme-swatch ${this.esc(activeTheme.id)}"><i class="fa-solid ${activeTheme.icon}"></i></span>
-          <span class="theme-studio-copy">
-            <span class="theme-studio-label">Theme</span>
-            <strong>${this.esc(activeTheme.label)}</strong>
-          </span>
-          <span class="theme-studio-meta ${this.esc(activeTheme.mode)}">
-            ${activeTheme.mode === 'dark' ? 'Dark' : 'Light'}
-          </span>
-          <span class="theme-studio-caret">
-            <i class="fa-solid fa-chevron-down theme-studio-trigger-icon"></i>
-          </span>
-        </button>
-        <div class="theme-studio-panel">
-          <div class="theme-studio-head">
-            <div>
-              <strong>Choose a visual mood</strong>
-              <span>${this.themes.length} themes available</span>
-            </div>
-          </div>
-          <div class="theme-group">
-            <div class="theme-group-label">Light Themes</div>
-            <div class="theme-grid">
-              ${lightThemes.map((theme) => this.renderThemeCard(theme)).join('')}
-            </div>
-          </div>
-          <div class="theme-group">
-            <div class="theme-group-label">Dark Themes</div>
-            <div class="theme-grid">
-              ${darkThemes.map((theme) => this.renderThemeCard(theme)).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
-  renderThemeCard(theme) {
-    return `
-      <button
-        class="theme-card ${theme.id === this.currentTheme ? 'active' : ''}"
-        onclick="app.setTheme('${theme.id}')"
-        title="${theme.label} theme"
-        type="button"
-      >
-        <span class="theme-card-top">
-          <span class="theme-swatch ${this.esc(theme.id)}"><i class="fa-solid ${theme.icon}"></i></span>
-          <span class="theme-card-name">${this.esc(theme.label)}</span>
-        </span>
-        <span class="theme-card-tone">${this.esc(theme.tone)}</span>
-      </button>
-    `;
+    window.TranslateHubPreact.renderThemeStudio(container, {
+      themes: this.themes,
+      currentTheme: this.currentTheme,
+      isOpen: this.isThemeMenuOpen,
+      onToggle: (event) => this.toggleThemeMenu(event),
+      onSelect: (themeId) => this.setTheme(themeId)
+    });
   },
 
   restoreLastView() {
