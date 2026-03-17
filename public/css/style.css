@@ -1339,19 +1339,20 @@ body::after {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(6, 10, 20, 0.26);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s;
+  transition: opacity 0.34s cubic-bezier(0.22, 1, 0.36, 1), background 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-overlay.active {
   opacity: 1;
   pointer-events: auto;
+  background: rgba(6, 10, 20, 0.42);
 }
 
 .modal {
@@ -1364,6 +1365,22 @@ body::after {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   border: 1px solid var(--surface-border);
   backdrop-filter: var(--backdrop-blur);
+  transform: translateY(28px) scale(0.94);
+  opacity: 0;
+  transition:
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-overlay.active .modal {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  box-shadow: 0 38px 80px rgba(0, 0, 0, 0.22);
+}
+
+.modal-stack {
+  animation: modalContentFade 0.48s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-header {
@@ -1984,6 +2001,17 @@ body::after {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes modalContentFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
