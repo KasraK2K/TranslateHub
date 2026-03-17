@@ -93,7 +93,7 @@ router.put('/:id', async (req, res) => {
 
         const matches = await project.compareProjectPassword(currentProjectPassword);
         if (!matches) {
-          return res.status(401).json({ error: 'Current project password is incorrect' });
+          return res.status(403).json({ error: 'Current project password is incorrect' });
         }
       }
 
@@ -131,7 +131,7 @@ router.delete('/:id', async (req, res) => {
 
     const matches = await project.compareProjectPassword(password);
     if (!matches) {
-      return res.status(401).json({ error: 'Incorrect project password' });
+      return res.status(403).json({ error: 'Incorrect project password' });
     }
 
     await TranslationKey.deleteMany({ projectId: project._id });
@@ -177,7 +177,7 @@ router.post('/:id/lock', async (req, res) => {
 
     const matches = await project.compareProjectPassword(password);
     if (!matches) {
-      return res.status(401).json({ error: 'Incorrect project password' });
+      return res.status(403).json({ error: 'Incorrect project password' });
     }
 
     project.isLocked = true;
@@ -203,7 +203,7 @@ router.post('/:id/unlock', async (req, res) => {
 
     const matches = await project.compareProjectPassword(password);
     if (!matches) {
-      return res.status(401).json({ error: 'Incorrect project password' });
+      return res.status(403).json({ error: 'Incorrect project password' });
     }
 
     project.isLocked = false;
