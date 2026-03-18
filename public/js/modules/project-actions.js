@@ -162,10 +162,22 @@
       }
 
       try {
-        await this.fetch(`/api/projects/${this.currentProject._id}/pages/${this.currentProjectPageId}/keys/${keyId}/translate`, {
+        const updatedKey = await this.fetch(`/api/projects/${this.currentProject._id}/pages/${this.currentProjectPageId}/keys/${keyId}/translate`, {
           method: 'PATCH',
           body: JSON.stringify({ locale, value })
         });
+        // Patch the updated key into the local keys array so stats recalculate immediately
+        if (updatedKey && Array.isArray(this.keys)) {
+          const idx = this.keys.findIndex((k) => String(k._id) === String(keyId));
+          if (idx !== -1) {
+            this.keys = [
+              ...this.keys.slice(0, idx),
+              updatedKey,
+              ...this.keys.slice(idx + 1)
+            ];
+            this.renderProjectDetail();
+          }
+        }
         if (inputEl) {
           inputEl.classList.remove('empty');
           inputEl.classList.add('saved');
