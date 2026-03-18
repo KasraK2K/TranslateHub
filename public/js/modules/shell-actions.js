@@ -262,6 +262,7 @@
     renderIntoApp(renderer, props) {
       if (!root.TranslateHubPreact || !renderer) return;
       const container = document.getElementById('app');
+      container.__k = null;
       container.innerHTML = '';
       renderer(container, props);
     },
