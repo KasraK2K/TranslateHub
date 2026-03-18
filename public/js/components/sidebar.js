@@ -1,10 +1,19 @@
 import { h, render } from '/vendor/preact/dist/preact.module.js';
+import { useState } from '/vendor/preact/hooks/dist/hooks.module.js';
 import htm from '/vendor/htm/dist/htm.module.js';
 
 const html = htm.bind(h);
 
 function Sidebar({ projects, currentPage, currentProjectId, currentProjectPageId, filter, isSuperAdmin, onFilter }) {
+  const [expandedProjects, setExpandedProjects] = useState({});
   const filteredProjects = projects.filter((project) => project.name.toLowerCase().includes((filter || '').toLowerCase()));
+
+  const toggleProjectExpanded = (projectId) => {
+    setExpandedProjects(prev => ({
+      ...prev,
+      [projectId]: !prev[projectId]
+    }));
+  };
 
   return html`
     <div class="sidebar-section">
@@ -31,24 +40,47 @@ function Sidebar({ projects, currentPage, currentProjectId, currentProjectPageId
         <input type="text" placeholder="Filter projects" value=${filter} onInput=${(event) => onFilter(event.currentTarget.value)} />
       </div>
       ${filteredProjects.length
-        ? filteredProjects.map((project) => html`
-            <button class=${`sidebar-item ${currentProjectId === project._id ? 'active' : ''}`} type="button" onClick=${() => window.app.showProject(project._id, { pageId: null })}>
-              <i class=${`fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon`}></i> ${project.name}
-            </button>
-            ${currentProjectId === project._id && (project.pages || []).length
-              ? html`
-                  <div class="sidebar-sublist">
+        ? filteredProjects.map((project) => {
+            const isExpanded = expandedProjects[project._id] !== false;
+            const hasPages = (project.pages || []).length > 0;
+            return html`
+              <div class="sidebar-project-group">
+                <button
+                  class=${`sidebar-project-header ${currentProjectId === project._id ? 'active' : ''}`}
+                  type="button"
+                  onClick=${() => window.app.showProject(project._id, { pageId: null })}
+                >
+                  <div class="sidebar-project-left">
+                    <i class=${`fa-solid ${project.isLocked ? 'fa-lock' : 'fa-language'} icon`}></i>
+                    <span>${project.name}</span>
+                  </div>
+                  ${hasPages ? html`
+                    <button
+                      class="sidebar-expand-toggle"
+                      type="button"
+                      onClick=${(e) => { e.stopPropagation(); toggleProjectExpanded(project._id); }}
+                      title=${isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      <i class=${`fa-solid fa-chevron-down ${isExpanded ? 'expanded' : ''}`}></i>
+                    </button>
+                  ` : ''}
+                </button>
+                ${hasPages && isExpanded ? html`
+                  <div class="sidebar-pages-list">
                     ${(project.pages || []).map((page) => html`
-                      <button class=${`sidebar-subitem ${currentProjectPageId === page._id ? 'active' : ''}`} type="button" onClick=${() => window.app.showProject(project._id, { pageId: page._id })}>
-                        <i class="fa-solid fa-file-lines icon"></i>
-                        <span>${page.name}</span>
-                        <code>${page.pageKey}</code>
+                      <button
+                        class=${`sidebar-page-item ${currentProjectPageId === page._id ? 'active' : ''}`}
+                        type="button"
+                        onClick=${() => window.app.showProject(project._id, { pageId: page._id })}
+                      >
+                        ${page.name}
                       </button>
                     `)}
                   </div>
-                `
-              : ''}
-          `)
+                ` : ''}
+              </div>
+            `;
+          })
         : html`<div class="sidebar-empty">No matching projects</div>`}
     </div>
   `;
