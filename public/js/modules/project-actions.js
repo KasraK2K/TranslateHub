@@ -290,9 +290,10 @@
       const value = String(this.modalState && this.modalState.sourceValue || '').trim();
       if (!key) return this.toast('Key is required', 'error');
       if (!Helpers.isValidLocalKey(key)) return this.toast('Key may contain only lowercase letters, numbers, hyphens, and underscores', 'error');
+      if (!value) return this.toast('Source text is required', 'error');
 
       const translations = {};
-      if (value) translations[this.currentProject.sourceLocale] = value;
+      translations[this.currentProject.sourceLocale] = value;
 
       try {
         await this.fetch(`/api/projects/${this.currentProject._id}/pages/${this.currentProjectPageId}/keys`, {

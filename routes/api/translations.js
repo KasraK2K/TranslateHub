@@ -75,8 +75,14 @@ async function ensureProjectUnlocked(req, res, next) {
 }
 
 function formatKeyDocument(doc, page) {
+  const obj = doc.toObject();
+  // Mongoose Map fields remain as Map objects after toObject(), which JSON.stringify
+  // serializes as {} (empty), silently dropping all translation values. Convert explicitly.
+  if (obj.translations instanceof Map) {
+    obj.translations = Object.fromEntries(obj.translations);
+  }
   return {
-    ...doc.toObject(),
+    ...obj,
     page: getPageSummary(page)
   };
 }
